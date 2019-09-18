@@ -9,7 +9,6 @@ from datetime import *
 import numpy as np
 import pandas as pd
 
-
 # ============================= CLASSES ==========================
 # FileInfo is an object that stores the first parts of every file
 class FileInfo:
@@ -369,5 +368,3 @@ def process_curr(x, output, iter, time, offsets, gains, write_to_file=False):
         returned_arr.append(((iter * 300) + j, time, x_comp, y_comp, z_comp))
 
     return returned_arr
-
-
