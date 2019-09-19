@@ -10,11 +10,11 @@ pdf_path = (
 ga_file = ga.GENEActivFile(bin_file_path)
 
 ga_file.read()
-ga_file.create_pdf(pdf_path, 4)
+#ga_file.create_pdf(pdf_path, 4)
 
-#ga_file.view_data(1,10)
+ga_file.view_data(1,10)
 
-#print(ga_file.dataview.head())
+print(ga_file.dataview.head())
 #print(ga_file.dataview.shape)
 
 #print(ga_file.pagecount)

@@ -13,6 +13,8 @@
 #
 # TO DO
 # - calibrate light (x * lux / volts)
+# - TEST DATA OUTPUT TO ENSURE READ AND CONVERSION ARE ACCURATE
+# - TEST LIGHT VALUES SPECIFICALLY (COMPARE TO GENEARead?)
 
 
 
@@ -191,6 +193,8 @@ class GENEActivFile:
             x_offset = int(self.header['x offset'])
             y_offset = int(self.header['y offset'])
             z_offset = int(self.header['z offset'])
+            lux = int(self.header['Lux'])
+            volts = int(self.header['Volts'])
             
         # grab chunk of data from packet
         data_chunk = [self.data_packet[i]
@@ -225,6 +229,7 @@ class GENEActivFile:
                     accel_x = (accel_x * 100 - x_offset) / x_gain
                     accel_y = (accel_y * 100 - y_offset) / y_gain
                     accel_z = (accel_z * 100 - z_offset) / z_gain
+                    light = light * lux / volts
 
                 # append values to dataview dict
                 dataview['accel_x'].append(accel_x)
@@ -300,7 +305,7 @@ class GENEActivFile:
 
         # add page and set font
         pdf.add_page()
-        pdf.set_font("Courier", size=12)
+        pdf.set_font("Courier", size=16)
 
         # print file_name as header
         pdf.cell(200, 10, txt = file_name, ln = 1, align = 'C', border = 1)
@@ -326,13 +331,6 @@ class GENEActivFile:
                                     
         # display time
         diff_time = round(time.time() - start_time, 3)
-        print(f'{diff_time} s\n')
-
-
-        print(pdf_path)   
+        print(f'{diff_time} s\n')   
 
         return pdf_path
-
-
-
-
