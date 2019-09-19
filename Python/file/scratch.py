@@ -8,8 +8,12 @@ ga_file = ga.GENEActivFile(bin_file_path)
 
 ga_file.read()
 
-print(ga_file.pagecount)
-print(ga_file.pagecount_match)
+ga_file.view_data(151390,151389)
+
+print(ga_file.dataview.head())
+print(ga_file.dataview.shape)
+
+#print(ga_file.pagecount)
+#print(ga_file.pagecount_match)
 
 
-#ga_file.view_data(1,900)

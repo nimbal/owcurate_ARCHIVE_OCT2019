@@ -39,11 +39,6 @@ class GENEActivFile:
 
         '''read text header and hex data from GENEActiv .bin file'''
 
-        # start timer
-        start_time = time.time()
-        print(f'Reading {self.file_path}...', end = ' ')
-
-
         def read_bin():
 
             '''read lines from a GENEActiv .bin file'''
@@ -112,7 +107,10 @@ class GENEActivFile:
             # store pagecount as attribute
             self.pagecount = pagecount
 
-             
+        # start timer
+        start_time = time.time()
+        print(f'Reading {self.file_path}...', end = ' ')
+  
         # read header and page packet
         header_packet = read_bin()
 
@@ -132,6 +130,24 @@ class GENEActivFile:
 
         '''parse and view a subset of the data in the file'''
 
+        def uint2int(unsigned_value, sign_bit):
+
+            '''convert an unsigned integer (in two's complement
+            representation) to a signed integer''' 
+
+            # x + x_twos_comp = 2^N
+            # x = 2^N - x_twos_comp
+            # x_twos_comp = 2^N - x
+
+            # unsigned_value must be between 0 and 2^sign_bit - 1
+            # inclusive otherwise give error
+
+            signed_value = (unsigned_value - 2**sign_bit
+                            if unsigned_value > 2**(sign_bit - 1) - 1
+                            else  unsigned_value)
+
+            return signed_value
+
         # check start and end values compared to number of pages
         # also check that data has been read and header values exist
 
@@ -139,25 +155,17 @@ class GENEActivFile:
         start_time = time.time()
         print('Parsing data to view...', end = ' ')
 
-        def uint2int(unsigned_value, sign_bit):
+        # store passed arguments before checking and modifying
+        oldstart = start
+        oldend = end
 
-                '''convert an unsigned integer (in two's complement
-                representation) to a signed integer''' 
+        # check start and end for acceptable values
+        if start < 1: start = 1
+        elif start > self.pagecount: start = round(self.pagecount)
 
-                # x + x_twos_comp = 2^N
-                # x = 2^N - x_twos_comp
-                # x_twos_comp = 2^N - x
-
-                # unsigned_value must be between 0 and 2^sign_bit - 1
-                # inclusive otherwise give error
-
-                signed_value = (unsigned_value - 2**sign_bit
-                                if unsigned_value > 2**(sign_bit - 1) - 1
-                                else  unsigned_value)
-
-                return signed_value
-
-
+        if end < start: end = start
+        elif end > self.pagecount: end = round(self.pagecount)
+        
         # initialize/reset variables
         self.dataview_start = start
         self.dataview_end = end
@@ -239,7 +247,14 @@ class GENEActivFile:
                             
         # display time
         diff_time = round(time.time() - start_time, 3)
-        print(f'{diff_time} s')
+        print(f'{diff_time} s\n')
+
+        # display message if start and end values were changed
+        if oldstart != start or oldend != end:
+            print('****** WARNING: Start or end values were modified to fit',
+                  'acceptable range.\n',
+                  f'       Old range: {oldstart} to {oldend}\n',
+                  f'       New range: {start} to {end}.\n')
 
         return self.dataview
         
