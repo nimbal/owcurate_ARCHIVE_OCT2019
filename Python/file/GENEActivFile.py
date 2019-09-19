@@ -10,11 +10,6 @@
 #   each measurement so it can be held in the same data table, this is
 #   consistent with the GENEARead R package behaviour
 #
-# TODO
-# - viewdata start and end values check
-# - create pdf
-# - check args etc in functions
-# - dcoumentation
 
 import time
 import datatable as dt
@@ -151,6 +146,11 @@ class GENEActivFile:
         # check start and end values compared to number of pages
         # also check that data has been read and header values exist
 
+        if not self.header or self.data_packet is None or self.pagecount is None:
+            print('****** WARNING: Cannot view data because file has not',
+                  'been read.')
+            return
+
         # start timer
         start_time = time.time()
         print('Parsing data to view...', end = ' ')
@@ -262,7 +262,11 @@ class GENEActivFile:
 
         '''create a pdf summary of this GENEActiv .bin file'''
 
-        pass
+        # start timer
+        start_time = time.time()
+        print('Creating pdf summary...', end = ' ')
+
+        #
 
 
 
@@ -270,8 +274,11 @@ class GENEActivFile:
 
 
 
+        # display time
+        diff_time = round(time.time() - start_time, 3)
+        print(f'{diff_time} s\n')
 
-
+        #return file path
 
 
 
