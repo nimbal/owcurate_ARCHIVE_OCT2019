@@ -6,11 +6,14 @@
 #
 #
 # TODO
+# - get data
 # - calibrate
 # - add temperature
 # - check page numbers
 
 import time
+#import numpy as np # double check if thisis this needed??
+#import pandas as pd
 import datatable as dt
 
 class GENEActivFile:
@@ -22,50 +25,42 @@ class GENEActivFile:
         self.file_path = file_path
         self.header = {}
         self.pages_read = None
-        self.data = dt.Frame({"accel_x" : [],
-                              "accel_y" : [],
-                              "accel_z" : [],
-                              "light"   : [],
-                              "button"  : []})
+        self.data_packet = None
+        self.dataview_start = None
+        self.dataview_end = None
+        self.dataview = None
 
 
-    def read(self, pages = -1):
-        # pages: any neg number = all, else number of pages
+    def read(self):
 
         '''read this GENEActiv .bin file and parse into header and data'''
 
-        
-        def read_bin(file_path, pages):
+        # start timer
+        start_time = time.time()
+        print(f'Reading {self.file_path}...', end = ' ')
+
+
+        def read_bin():
 
             '''read lines from a GENEActiv .bin file'''
 
-            # start timer
-            start = time.time()
-            print(f'Reading {file_path}...', end = ' ')
-
             # open file
-            bin_file = open(file_path, 'r', encoding = 'utf-8')
+            bin_file = open(self.file_path, 'r', encoding = 'utf-8')
 
-            # read pages
-            # adds empty strings if more pages than in file
-            if pages >= 0:
-                line_packet = [bin_file.readline()[:-1]
-                               for line in range(59 + pages*10)]
-            else:
-                line_packet = [line[:-1] for line in bin_file.readlines()]
+            # read file
+            line_packet = [line[:-1] for line in bin_file.readlines()]
 
             # close file
             bin_file.close()
 
             # parse into header and data packets
             header_packet = line_packet[:59]
-            data_packet = line_packet[59:]
-                
-            # display time
-            diff = round(time.time() - start, 3)
-            print(f'{diff} s')
+            self.data_packet = line_packet[59:]
 
-            return header_packet, data_packet
+            # page count
+            self.pages_read = len(self.data_packet) / 10
+
+            return header_packet
 
 
         def parse_header(header_packet):
@@ -73,10 +68,6 @@ class GENEActivFile:
             '''parse the header packet read from a GENEActiv .bin file'''
 
             self.header = {}
-
-            # start timer
-            start = time.time()
-            print('Parsing header...', end = ' ')
 
             for line in header_packet:
 
@@ -88,25 +79,43 @@ class GENEActivFile:
                         line[colon+1:].rstrip('\x00').rstrip())
                 except ValueError:
                     pass
+                
 
-            # display time
-            diff = round(time.time() - start, 3)
-            print(f'{diff} s')
+        # read header and page packet
+        header_packet = read_bin()
+
+        # parse header
+        parse_header(header_packet)
+
+        # display time
+        diff_time = round(time.time() - start_time, 3)
+        print(f'{diff_time} s')
+
+        # confirm number of pages - self.pages_read
+        # count actual pages - and provide warnings if doesn't match header
+        # and/or pages or if incomplete pages (multiple of 10)
 
 
-        def parse_data(data_packet):
+    def view_data(self, start = 1, end = 900, calibrate = True):
 
-            '''parse the data packet read from a GENEActiv .bin file'''
+        '''view a subset of the data in the file'''
 
-            def uint2int(unsigned_value, sign_bit):
+        # check start and end values compared to number of pages
+        # also check that data has been read and header values exist
+
+        # start timer
+        start_time = time.time()
+        print('Parsing data to view...', end = ' ')
+
+        def uint2int(unsigned_value, sign_bit):
 
                 '''convert an unsigned integer (in two's complement
                 representation) to a signed integer''' 
-  
+
                 # x + x_twos_comp = 2^N
                 # x = 2^N - x_twos_comp
                 # x_twos_comp = 2^N - x
-  
+
                 # unsigned_value must be between 0 and 2^sign_bit - 1
                 # inclusive otherwise give error
 
@@ -115,89 +124,77 @@ class GENEActivFile:
                                 else  unsigned_value)
 
                 return signed_value
-  
-            # initialize variables
-            lines_removed = None
-            pages_removed = None
-            self.data = dt.Frame({"accel_x" : [],
-                                  "accel_y" : [],
-                                  "accel_z" : [],
-                                  "light"   : [],
-                                  "button"  : []})
-
-            # start timer
-            start = time.time()
-            print('Parsing data...', end = ' ')
-
-            # remove blank lines at end (if more pages requested than exist)
-            try:
-
-                # find and remove blanks at end of read (if parges arg > pages)
-                blank_index = data_packet.index('')
-                num_lines = len(data_packet)
-                data_packet = data_packet[:blank_index]
-
-                # count lines and pages removed
-                lines_removed = num_lines - blank_index
-                pages_removed = lines_removed / 10
-
-            except ValueError: # if no blanks found
-                pass
 
 
-            # page count
-            self.pages_read = len(data_packet) / 10
-
-            # loop through pages
-            for page in range(round(self.pages_read)):
-
-                # parse data line from page lines (line 10 of 10)
-                data_line = data_packet[page * 10 + 9]
-
-                # loop through 300 measurements in each page
-                for meas_index in range(300):
-
-                    # parse measurement from line and convert from hex to bin
-                    meas = data_line[meas_index * 12 : (meas_index + 1) * 12]
-                    meas = bin(int(meas, 16))[2:]
-                    meas = meas.zfill(48)
-
-                    # parse each signal from measurement and add to data
-                    self.data.rbind(
-                        dt.Frame({"accel_x" : [uint2int(int(meas[0:12], 2), 12)],
-                                  "accel_y" : [uint2int(int(meas[12:24], 2), 12)],
-                                  "accel_z" : [uint2int(int(meas[24:36], 2), 12)],
-                                  "light"   : [int(meas[36:46], 2)],
-                                  "button"  : [int(meas[46], 2)]}))
-                                # "res" : int(meas[47], 2)   # NOT USED FOR NOW
-                        
-            # display time
-            diff = round(time.time() - start, 3)
-            print(f'{diff} s')
-
-            # display warning if blank pages (lines) removed from packet
-            if lines_removed is not None:
-                print(f'****** WARNING: Blank pages encountered.',
-                      f'{pages_removed} pages ({lines_removed} lines)',
-                      f'were removed ******')
-
-            return data_packet
+        # initialize/reset variables
+        self.dataview_start = start
+        self.dataview_end = end
+        dataview = {"accel_x" : [],
+                    "accel_y" : [],
+                    "accel_z" : [],
+                    "light"   : [],
+                    "button"  : []}
 
 
-        # read header and page packet
-        header_packet, data_packet = read_bin(self.file_path, pages)
+        # get calibration variables from header
+        if calibrate is True:
+            x_gain = int(self.header['x gain'])
+            y_gain = int(self.header['y gain'])
+            z_gain = int(self.header['z gain'])
+            x_offset = int(self.header['x offset'])
+            y_offset = int(self.header['y offset'])
+            z_offset = int(self.header['z offset'])
+            
+        # grab chunk of data from packet
+        data_chunk = [self.data_packet[i]
+                    for i in range(int(start * 10 - 1), int(end * 10), 10)]
+        
+        # loop through pages
+        for data_line in data_chunk:
 
-        # parse header
-        parse_header(header_packet)
+            # loop through 300 measurements in each page
+            for meas_index in range(300):
 
-        # parse data
-        self.data_packet = parse_data(data_packet)
+                # parse measurement from line and convert from hex to bin
+                meas = data_line[meas_index * 12 : (meas_index + 1) * 12]
+                meas = bin(int(meas, 16))[2:]
+                meas = meas.zfill(48)
 
-        # confirm number of pages - self.pages_read
-        # count actual pages - and provide warnings if doesn't match header
-        # and/or pages or if incomplete pages (multiple of 10)
+                # parse each signal from measurement and convert to int
+                accel_x = int(meas[0:12], 2)
+                accel_y = int(meas[12:24], 2)
+                accel_z =  int(meas[24:36], 2)
+                light = int(meas[36:46], 2)
+                button = int(meas[46], 2)
+                # res = int(meas[47], 2)   # NOT USED FOR NOW
 
+                # convert accelerometer data to signed integer
+                accel_x = uint2int(accel_x, 12)
+                accel_y = uint2int(accel_y, 12)
+                accel_z = uint2int(accel_z, 12)
 
+                # calibrate accelerometers
+                if calibrate is True:
+                    accel_x = (accel_x * 100 - x_offset) / x_gain
+                    accel_y = (accel_y * 100 - y_offset) / y_gain
+                    accel_z = (accel_z * 100 - z_offset) / z_gain
+
+                # append values to dataview dict
+                dataview['accel_x'].append(accel_x)
+                dataview['accel_y'].append(accel_y)
+                dataview['accel_z'].append(accel_z)
+                dataview['light'].append(light)
+                dataview['button'].append(button)  
+
+        # populate self.dataview dataframe
+        self.dataview = dt.Frame(dataview)
+                            
+        # display time
+        diff_time = round(time.time() - start_time, 3)
+        print(f'{diff_time} s')
+
+        return self.dataview
+        
     def create_pdf(folder_path):
 
         '''create a pdf summary of this GENEActiv .bin file'''
@@ -212,10 +209,10 @@ bin_file_path = (
 
 ga_file = GENEActivFile(bin_file_path)
 
-ga_file.read(-1)
+ga_file.read()
+ga_file.view_data(1,900)
 
 
-ga_file.data.head()
 
 
 
