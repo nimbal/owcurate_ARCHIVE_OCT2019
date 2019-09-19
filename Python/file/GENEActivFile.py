@@ -130,7 +130,7 @@ class GENEActivFile:
 
 
     def view_data(self, start = 1, end = 900, temperature = True,
-                  calibrate = True):
+                  calibrate = True, update = True):
 
         '''parse and view a subset of the data in the file'''
 
@@ -152,9 +152,7 @@ class GENEActivFile:
 
             return signed_value
 
-        # check start and end values compared to number of pages
-        # also check that data has been read and header values exist
-
+        # check whether data has been read
         if not self.header or self.data_packet is None or self.pagecount is None:
             print('****** WARNING: Cannot view data because file has not',
                   'been read.')
@@ -175,15 +173,12 @@ class GENEActivFile:
         if end < start: end = start
         elif end > self.pagecount: end = round(self.pagecount)
         
-        # initialize/reset variables
-        self.dataview_start = start
-        self.dataview_end = end
+        # initialize dataview
         dataview = {"accel_x" : [],
                     "accel_y" : [],
                     "accel_z" : [],
                     "light"   : [],
                     "button"  : []}
-
 
         # get calibration variables from header
         if calibrate:
@@ -237,8 +232,8 @@ class GENEActivFile:
                 dataview['accel_z'].append(accel_z)
                 dataview['light'].append(light)
                 dataview['button'].append(button)
-                            
 
+                            
         # add tempreature if requested
         if temperature:
 
@@ -254,8 +249,11 @@ class GENEActivFile:
                 colon = temp_line.index(':')
                 dataview['temp'].extend([float(temp_line[colon + 1:])] * 300)
 
-        # populate self.dataview dataframe
-        self.dataview = dt.Frame(dataview)
+        # update object attributes
+        if update:
+            self.dataview_start = start
+            self.dataview_end = end
+            self.dataview = dt.Frame(dataview)
                             
         # display time
         diff_time = round(time.time() - start_time, 3)
@@ -268,7 +266,8 @@ class GENEActivFile:
                   f'       Old range: {oldstart} to {oldend}\n',
                   f'       New range: {start} to {end}.\n')
 
-        return self.dataview
+        return dataview
+
         
     def create_pdf(self, folder_path, hours = 4):
 
@@ -305,21 +304,25 @@ class GENEActivFile:
 
         # add page and set font
         pdf.add_page()
-        pdf.set_font("Courier", size=16)
+        pdf.set_font(font = "Courier", size = 16)
 
         # print file_name as header
         pdf.cell(200, 10, txt = file_name, ln = 1, align = 'C', border = 1)
 
-        pdf.set_font("Courier", size=12)
-
+        pdf.set_font(font = "Courier", size = 12)
         header_text = '\n'
 
+        # find lenght of longest key in header
         key_length = max(len(key) for key in self.header.keys()) + 1
 
+        # create text string for header information
         for key, value in self.header.items():
             header_text = header_text + f"{key:{key_length}}:  {value}\n"
 
+        # print header to pdf
         pdf.multi_cell(200, 5, txt = header_text, align = 'L')
+
+        print(view_data())
 
         
 
