@@ -5,15 +5,18 @@
 # (Kit Beyer) and Python modules (David Ding)
 #
 #
+# NOTES:
+# - temperature is only sampled once per page but is currently inserted at
+#   each measurement so it can be held in the same data table, this is
+#   consistent with the GENEARead R package behaviour
+#
 # TODO
-# - get data
-# - calibrate
-# - add temperature
 # - check page numbers
+# - create pdf
+# - check args etc in functions
+# - dcoumentation
 
 import time
-#import numpy as np # double check if thisis this needed??
-#import pandas as pd
 import datatable as dt
 
 class GENEActivFile:
@@ -22,18 +25,18 @@ class GENEActivFile:
 
         '''initialize GENEActivFile'''
 
-        self.file_path = file_path
-        self.header = {}
-        self.pages_read = None
-        self.data_packet = None
-        self.dataview_start = None
-        self.dataview_end = None
-        self.dataview = None
+        self.file_path = file_path      # path to .bin file
+        self.header = {}                # header dictionary
+        self.pages_read = None          # actual pages read from file
+        self.data_packet = None         # hexadecimal data from entire file
+        self.dataview_start = None      # start page of current dataview
+        self.dataview_end = None        # end page of current dataview
+        self.dataview = None            # current dataview (subset of data)
 
 
     def read(self):
 
-        '''read this GENEActiv .bin file and parse into header and data'''
+        '''read text header and hex data from GENEActiv .bin file'''
 
         # start timer
         start_time = time.time()
@@ -76,7 +79,7 @@ class GENEActivFile:
                 try:
                     colon = line.index(":")
                     self.header[line[:colon]] = (
-                        line[colon+1:].rstrip('\x00').rstrip())
+                        line[colon + 1:].rstrip('\x00').rstrip())
                 except ValueError:
                     pass
                 
@@ -96,9 +99,10 @@ class GENEActivFile:
         # and/or pages or if incomplete pages (multiple of 10)
 
 
-    def view_data(self, start = 1, end = 900, calibrate = True):
+    def view_data(self, start = 1, end = 900, temperature = True,
+                  calibrate = True):
 
-        '''view a subset of the data in the file'''
+        '''parse and view a subset of the data in the file'''
 
         # check start and end values compared to number of pages
         # also check that data has been read and header values exist
@@ -137,7 +141,7 @@ class GENEActivFile:
 
 
         # get calibration variables from header
-        if calibrate is True:
+        if calibrate:
             x_gain = int(self.header['x gain'])
             y_gain = int(self.header['y gain'])
             z_gain = int(self.header['z gain'])
@@ -174,7 +178,7 @@ class GENEActivFile:
                 accel_z = uint2int(accel_z, 12)
 
                 # calibrate accelerometers
-                if calibrate is True:
+                if calibrate:
                     accel_x = (accel_x * 100 - x_offset) / x_gain
                     accel_y = (accel_y * 100 - y_offset) / y_gain
                     accel_z = (accel_z * 100 - z_offset) / z_gain
@@ -184,7 +188,24 @@ class GENEActivFile:
                 dataview['accel_y'].append(accel_y)
                 dataview['accel_z'].append(accel_z)
                 dataview['light'].append(light)
-                dataview['button'].append(button)  
+                dataview['button'].append(button)
+                            
+
+        # add tempreature if requested
+        if temperature:
+
+            # create temp key in dict
+            dataview['temp'] = []
+
+            # get all temp lines from data packet (1 per page)
+            temp_chunk = [self.data_packet[i]
+                          for i in range(int((start - 1) * 10 + 5),
+                                         int(end * 10), 10)]
+
+            # parse temp from temp lines and insert into dict
+            for temp_line in temp_chunk:
+                colon = temp_line.index(':')
+                dataview['temp'].extend([float(temp_line[colon + 1:])] * 300)
 
         # populate self.dataview dataframe
         self.dataview = dt.Frame(dataview)
@@ -195,7 +216,7 @@ class GENEActivFile:
 
         return self.dataview
         
-    def create_pdf(folder_path):
+    def create_pdf(self, folder_path, hours = 4):
 
         '''create a pdf summary of this GENEActiv .bin file'''
 
