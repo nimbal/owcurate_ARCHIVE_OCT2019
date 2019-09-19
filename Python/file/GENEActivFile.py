@@ -10,9 +10,16 @@
 #   each measurement so it can be held in the same data table, this is
 #   consistent with the GENEARead R package behaviour
 #
+#
+# TO DO
+# - calibrate light (x * lux / volts)
 
+
+
+import os
 import time
 import datatable as dt
+from fpdf import FPDF
 
 class GENEActivFile:
 
@@ -262,23 +269,69 @@ class GENEActivFile:
 
         '''create a pdf summary of this GENEActiv .bin file'''
 
+        # add check for data read
+
         # start timer
         start_time = time.time()
         print('Creating pdf summary...', end = ' ')
 
-        #
+        # initialize pdf
+        pdf = FPDF(format = 'letter')
 
 
+        # FILE PATH -----------------
+
+        # define file path separator based on os
+        if os.name == 'posix': sep = '/'
+        else: sep = '\\'
+
+        # ensure folder_path ends with sep
+        if folder_path[-1] != sep: folder_path = folder_path + sep
+
+        # get file_name from file_path
+        index = -self.file_path[::-1].index(sep)
+        file_name = self.file_path[index:]
+
+        # build pdf file path
+        index = file_name.index('.')
+        pdf_path = folder_path + file_name[:index] + '.pdf'
+
+        # HEADER PAGE ----------------
+
+        # add page and set font
+        pdf.add_page()
+        pdf.set_font("Courier", size=12)
+
+        # print file_name as header
+        pdf.cell(200, 10, txt = file_name, ln = 1, align = 'C', border = 1)
+
+        pdf.set_font("Courier", size=12)
+
+        header_text = '\n'
+
+        key_length = max(len(key) for key in self.header.keys()) + 1
+
+        for key, value in self.header.items():
+            header_text = header_text + f"{key:{key_length}}:  {value}\n"
+
+        pdf.multi_cell(200, 5, txt = header_text, align = 'L')
+
+        
+
+        
 
 
-
-
-
+        # output to pdf file
+        pdf.output(pdf_path)
+                                    
         # display time
         diff_time = round(time.time() - start_time, 3)
         print(f'{diff_time} s\n')
 
-        #return file path
+
+        print(pdf_path)   
+
+        return pdf_path
 
 
 
