@@ -11,7 +11,7 @@
 #   consistent with the GENEARead R package behaviour
 #
 # TODO
-# - check page numbers
+# - viewdata start and end values check
 # - create pdf
 # - check args etc in functions
 # - dcoumentation
@@ -27,7 +27,8 @@ class GENEActivFile:
 
         self.file_path = file_path      # path to .bin file
         self.header = {}                # header dictionary
-        self.pages_read = None          # actual pages read from file
+        self.pagecount = None           # actual pages read from file
+        self.pagecount_match = None     # does pagecount read match header
         self.data_packet = None         # hexadecimal data from entire file
         self.dataview_start = None      # start page of current dataview
         self.dataview_end = None        # end page of current dataview
@@ -60,9 +61,6 @@ class GENEActivFile:
             header_packet = line_packet[:59]
             self.data_packet = line_packet[59:]
 
-            # page count
-            self.pages_read = len(self.data_packet) / 10
-
             return header_packet
 
 
@@ -82,8 +80,39 @@ class GENEActivFile:
                         line[colon + 1:].rstrip('\x00').rstrip())
                 except ValueError:
                     pass
-                
 
+
+        def check_pagecount():
+
+            '''Check to see if number of pages read matches header'''
+
+            # set match to true
+            self.pagecount_match = True
+
+            # get page counts
+            pagecount = len(self.data_packet) / 10
+            header_pagecount = int(self.header['Number of Pages'])
+
+            # check if pages read is an integer (lines read is multiple of 10)
+            if not pagecount.is_integer():
+
+                # set match to false and display warning
+                self.pagecount_match = False
+                print(f"****** WARNING: Pages read ({pagecount}) is not",
+                      f"an integer, data may be corrupt.\n")
+
+            # check if pages read matches header count
+            if pagecount != header_pagecount:
+
+                # set match to false and display warning
+                self.pagecount_match = False
+                print(f"****** WARNING: Pages read ({pagecount}) not equal to",
+                      f"'Number of Pages' in header ({header_pagecount}).\n")
+
+            # store pagecount as attribute
+            self.pagecount = pagecount
+
+             
         # read header and page packet
         header_packet = read_bin()
 
@@ -92,11 +121,10 @@ class GENEActivFile:
 
         # display time
         diff_time = round(time.time() - start_time, 3)
-        print(f'{diff_time} s')
+        print(f'{diff_time} s\n')
 
-        # confirm number of pages - self.pages_read
-        # count actual pages - and provide warnings if doesn't match header
-        # and/or pages or if incomplete pages (multiple of 10)
+        # confirm number of pages read matches header
+        check_pagecount()
 
 
     def view_data(self, start = 1, end = 900, temperature = True,
@@ -151,7 +179,7 @@ class GENEActivFile:
             
         # grab chunk of data from packet
         data_chunk = [self.data_packet[i]
-                    for i in range(int(start * 10 - 1), int(end * 10), 10)]
+                    for i in range(start * 10 - 1, end * 10, 10)]
         
         # loop through pages
         for data_line in data_chunk:
@@ -199,8 +227,7 @@ class GENEActivFile:
 
             # get all temp lines from data packet (1 per page)
             temp_chunk = [self.data_packet[i]
-                          for i in range(int((start - 1) * 10 + 5),
-                                         int(end * 10), 10)]
+                          for i in range((start - 1) * 10 + 5, end * 10, 10)]
 
             # parse temp from temp lines and insert into dict
             for temp_line in temp_chunk:
@@ -222,16 +249,6 @@ class GENEActivFile:
 
         pass
 
-#------------------------------------------------------------------------------
-
-
-bin_file_path = (
-    '/Users/kbeyer/repos/test_data/OND06_SBH_9248_01_SE01_GABL_GA_LA.bin')
-
-ga_file = GENEActivFile(bin_file_path)
-
-ga_file.read()
-ga_file.view_data(1,900)
 
 
 
