@@ -1,4 +1,5 @@
 import GENEActivFile as ga
+import time
 
 
 bin_file_path = (
@@ -9,17 +10,34 @@ pdf_path = (
 
 ga_file = ga.GENEActivFile(bin_file_path)
 
+print(f'reading {bin_file_path} ...')
 ga_file.read()
 
 
-print(ga_file.view_data(1,10))
-print(ga_file.view_data(2,10,update=False))
+start = time.time()
 
-print(ga_file.dataview.head())
-print(ga_file.dataview.shape)
-
+print('creating pdf...')
+ga_file.create_pdf(pdf_path)
 
 
-#ga_file.create_pdf(pdf_path, 4)
+end = time.time()
+print(end - start)
+
+
+#print(f'parsing data ...')
+#ga_file.view_data()
+
+
+
+
+#print(ga_file.view_data(1,10))
+#print(ga_file.view_data(2,10,update=False))
+
+#print(ga_file.dataview.head())
+#print(ga_file.dataview.shape)
+
+
+
+
 
 

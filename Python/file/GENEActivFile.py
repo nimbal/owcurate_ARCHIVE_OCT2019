@@ -12,16 +12,22 @@
 #
 #
 # TO DO
-# - calibrate light (x * lux / volts)
+# - add downsample option to view_data
+# - use os for path and file concatenation, etc.
 # - TEST DATA OUTPUT TO ENSURE READ AND CONVERSION ARE ACCURATE
 # - TEST LIGHT VALUES SPECIFICALLY (COMPARE TO GENEARead?)
-
-
+# - is dt.Frame necessary or is dictionary better??
+# 
+#
 
 import os
-import time
+import shutil
 import datatable as dt
-from fpdf import FPDF
+import fpdf
+import matplotlib.pyplot as plt
+import matplotlib.style as mplstyle
+
+mplstyle.use('fast')
 
 class GENEActivFile:
 
@@ -31,7 +37,7 @@ class GENEActivFile:
 
         self.file_path = file_path      # path to .bin file
         self.header = {}                # header dictionary
-        self.pagecount = None           # actual pages read from file
+        self.pagecount = None           # actual pages read from file (float)
         self.pagecount_match = None     # does pagecount read match header
         self.data_packet = None         # hexadecimal data from entire file
         self.dataview_start = None      # start page of current dataview
@@ -111,19 +117,12 @@ class GENEActivFile:
             # store pagecount as attribute
             self.pagecount = pagecount
 
-        # start timer
-        start_time = time.time()
-        print(f'Reading {self.file_path}...', end = ' ')
   
         # read header and page packet
         header_packet = read_bin()
 
         # parse header
         parse_header(header_packet)
-
-        # display time
-        diff_time = round(time.time() - start_time, 3)
-        print(f'{diff_time} s\n')
 
         # confirm number of pages read matches header
         check_pagecount()
@@ -157,10 +156,6 @@ class GENEActivFile:
             print('****** WARNING: Cannot view data because file has not',
                   'been read.')
             return
-
-        # start timer
-        start_time = time.time()
-        print('Parsing data to view...', end = ' ')
 
         # store passed arguments before checking and modifying
         oldstart = start
@@ -254,10 +249,6 @@ class GENEActivFile:
             self.dataview_start = start
             self.dataview_end = end
             self.dataview = dt.Frame(dataview)
-                            
-        # display time
-        diff_time = round(time.time() - start_time, 3)
-        print(f'{diff_time} s\n')
 
         # display message if start and end values were changed
         if oldstart != start or oldend != end:
@@ -269,47 +260,124 @@ class GENEActivFile:
         return dataview
 
         
-    def create_pdf(self, folder_path, hours = 4):
+    def create_pdf(self, pdf_folder, window_hours = 4):
 
         '''create a pdf summary of this GENEActiv .bin file'''
 
-        # add check for data read
+        # check whether data has been read
+        if not self.header or self.data_packet is None or self.pagecount is None:
+            print('****** WARNING: Cannot view data because file has not',
+                  'been read.')
+            return
 
-        # start timer
-        start_time = time.time()
-        print('Creating pdf summary...', end = ' ')
+        # FILE NAMES AND PATHS -----------------
+        
+        bin_file = os.path.basename(self.file_path)
 
-        # initialize pdf
-        pdf = FPDF(format = 'letter')
+        base_file = os.path.splitext(bin_file)[0]
+
+        pdf_file = base_file + '.pdf'
+        pdf_path = os.path.join(pdf_folder, pdf_file)
+
+        png_folder = os.path.join(pdf_folder, 'temp','')
+
+        # calculate sample rate and pages per plot
+        sample_rate = int(self.header['Measurement Frequency'][:-3])
+        window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
+        window_sequence = range(1, round(self.pagecount), window_pages)
+
+        # *******Adjust hours if not even number of pages
 
 
-        # FILE PATH -----------------
+        # CREATE PLOTS ------
 
-        # define file path separator based on os
-        if os.name == 'posix': sep = '/'
-        else: sep = '\\'
+        ###### THESE SETTINGS BELOW SHOULD BE MORE DYNAMIC#####
 
-        # ensure folder_path ends with sep
-        if folder_path[-1] != sep: folder_path = folder_path + sep
+        # set axis limits for each plot [xmin, xmax, ymin, ymax]
+        axis_lim = [[0, window_pages * 300, -8.2, 8.2],
+                    [0, window_pages * 300, -8.2, 8.2],
+                    [0, window_pages * 300, -8.2, 8.2],
+                    [0, window_pages * 300, 0, 5000],
+                    [0, window_pages * 300, 0, 1],
+                    [0, window_pages * 300, 0, 40]]
 
-        # get file_name from file_path
-        index = -self.file_path[::-1].index(sep)
-        file_name = self.file_path[index:]
+        axis_yticks = [[-8,0,8],
+                       [-8,0,8],
+                       [-8,0,8],
+                       [0,5000],
+                       [0,1],
+                       [0,40]]
 
-        # build pdf file path
-        index = file_name.index('.')
-        pdf_path = folder_path + file_name[:index] + '.pdf'
+        axis_ylabel = ['g', 'g', 'g', 'lux', '', 'deg C']
+
+        axis_colour = ['b', 'g', 'r', 'c', 'm', 'y']
+
+        plt.rcParams['lines.linewidth'] = 0.5
+        plt.rcParams['figure.figsize'] = (6, 7.5)
+
+
+
+
+        if not os.path.exists(png_folder): os.mkdir(png_folder)
+
+        for start_index in window_sequence:
+
+            fig, ax = plt.subplots(6, 1)
+            fig.suptitle('PUT TIME RANGE HERE')
+
+            end_index = start_index + window_pages - 1
+
+            plot_data = self.view_data(start = start_index,
+                                       end = end_index,
+                                       update = False)
+
+            
+            
+
+            subplot_index = 0
+
+            for key in plot_data.keys():
+                
+                ax[subplot_index].spines["top"].set_visible(False)
+                ax[subplot_index].spines["bottom"].set_visible(False)
+                ax[subplot_index].spines["right"].set_visible(False)
+
+                ax[subplot_index].axis(axis_lim[subplot_index])
+                ax[subplot_index].get_xaxis().set_visible(False)
+
+                ax[subplot_index].set_yticks(axis_yticks[subplot_index])
+                ax[subplot_index].set_ylabel(axis_ylabel[subplot_index])
+
+                ax[subplot_index].text(0.01, 0.9, key,
+                                       color = axis_colour[subplot_index],
+                                       transform = ax[subplot_index].transAxes)
+                ax[subplot_index].plot(range(len(plot_data[key])),
+                                       plot_data[key],
+                                       color = axis_colour[subplot_index])
+
+                subplot_index += 1
+
+            png_file = 'plot_' + str(start_index) + '.png'
+            
+            fig.savefig(os.path.join(png_folder, png_file))
+            plt.close(fig)
+
+
+        # CREATE PDF ------
 
         # HEADER PAGE ----------------
 
+        # initialize pdf
+        pdf = fpdf.FPDF(format = 'letter')
+
         # add page and set font
         pdf.add_page()
-        pdf.set_font(font = "Courier", size = 16)
+        pdf.set_font("Courier", size = 16)
 
         # print file_name as header
-        pdf.cell(200, 10, txt = file_name, ln = 1, align = 'C', border = 1)
+        pdf.cell(200, 10, txt = bin_file, ln = 1, align = 'C', border = 0)
 
-        pdf.set_font(font = "Courier", size = 12)
+        pdf.set_font("Courier", size = 12)
         header_text = '\n'
 
         # find lenght of longest key in header
@@ -322,18 +390,36 @@ class GENEActivFile:
         # print header to pdf
         pdf.multi_cell(200, 5, txt = header_text, align = 'L')
 
-        print(view_data())
 
-        
 
-        
+        # PLOT DATA PAGE -------------
 
+
+        ###### PLOTING PLOTS IN WRONG ORDER BC FILE NAMES
+
+        png_files = os.listdir(png_folder)
+
+        for png_file in png_files:
+
+            png_path = os.path.join(png_folder, png_file)
+
+            # add page and set font
+            pdf.add_page()
+            pdf.set_font("Courier", size = 16)
+
+            # print file_name as header
+            pdf.cell(0, txt = bin_file, align = 'C')
+            pdf.ln()
+
+            pdf.image(png_path, x = 1, y = 15, type = 'png')
+
+
+        shutil.rmtree(png_folder)
+
+    
 
         # output to pdf file
         pdf.output(pdf_path)
-                                    
-        # display time
-        diff_time = round(time.time() - start_time, 3)
-        print(f'{diff_time} s\n')   
+                                     
 
         return pdf_path
