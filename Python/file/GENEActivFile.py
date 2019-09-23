@@ -31,6 +31,16 @@ mplstyle.use('fast')
 
 class GENEActivFile:
 
+    '''Class for interacting with GENEActiv .bin data files.
+
+
+    Attributes:
+
+
+
+    '''
+    
+
     def __init__(self, file_path):
 
         '''initialize GENEActivFile'''
@@ -42,6 +52,7 @@ class GENEActivFile:
         self.data_packet = None         # hexadecimal data from entire file
         self.dataview_start = None      # start page of current dataview
         self.dataview_end = None        # end page of current dataview
+        self.dataview_sample_rate = None# sample rate of current dataview
         self.dataview = None            # current dataview (subset of data)
 
 
@@ -128,8 +139,8 @@ class GENEActivFile:
         check_pagecount()
 
 
-    def view_data(self, start = 1, end = 900, temperature = True,
-                  calibrate = True, update = True):
+    def view_data(self, start = 1, end = 900, downsample = 1,
+                  temperature = True, calibrate = True, update = True):
 
         '''parse and view a subset of the data in the file'''
 
@@ -152,14 +163,17 @@ class GENEActivFile:
             return signed_value
 
         # check whether data has been read
-        if not self.header or self.data_packet is None or self.pagecount is None:
+        if (not self.header or self.data_packet is None
+            or self.pagecount is None):
+
             print('****** WARNING: Cannot view data because file has not',
-                  'been read.')
+                  'been read.\n')
             return
 
         # store passed arguments before checking and modifying
-        oldstart = start
-        oldend = end
+        old_start = start
+        old_end = end
+        old_downsample = downsample
 
         # check start and end for acceptable values
         if start < 1: start = 1
@@ -167,6 +181,10 @@ class GENEActivFile:
 
         if end < start: end = start
         elif end > self.pagecount: end = round(self.pagecount)
+
+        #check downsample for valid values
+        if downsample < 1: downsample = 1
+        elif downsample > 6: downsample = 6
         
         # initialize dataview
         dataview = {"accel_x" : [],
@@ -194,7 +212,7 @@ class GENEActivFile:
         for data_line in data_chunk:
 
             # loop through 300 measurements in each page
-            for meas_index in range(300):
+            for meas_index in range(0, 300, downsample):
 
                 # parse measurement from line and convert from hex to bin
                 meas = data_line[meas_index * 12 : (meas_index + 1) * 12]
@@ -242,20 +260,31 @@ class GENEActivFile:
             # parse temp from temp lines and insert into dict
             for temp_line in temp_chunk:
                 colon = temp_line.index(':')
-                dataview['temp'].extend([float(temp_line[colon + 1:])] * 300)
+                dataview['temp'].extend(
+                    [float(temp_line[colon + 1:])] * round(300 / downsample))
 
         # update object attributes
         if update:
             self.dataview_start = start
             self.dataview_end = end
+            self.dataview_sample_rate = (
+                int(self.header['Measurement Frequency'][:-3]) /
+                      downsample)
             self.dataview = dt.Frame(dataview)
 
         # display message if start and end values were changed
-        if oldstart != start or oldend != end:
+        if old_start != start or old_end != end:
             print('****** WARNING: Start or end values were modified to fit',
                   'acceptable range.\n',
-                  f'       Old range: {oldstart} to {oldend}\n',
-                  f'       New range: {start} to {end}.\n')
+                  f'       Old range: {old_start} to {old_end}\n',
+                  f'       New range: {start} to {end}\n')
+
+        # display message downsample ratio was changed
+        if old_downsample != downsample:
+            print('****** WARNING: Downsample value was modified to fit',
+                  'acceptable range.\n',
+                  f'       Old value: {old_downsample}\n',
+                  f'       New value: {downsample}\n')
 
         return dataview
 
