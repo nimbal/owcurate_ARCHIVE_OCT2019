@@ -1,19 +1,6 @@
-# Kit Beyer
-# GENEActivFile class meant ot store the contents of a GENEActiv .bin data
-# file. Methods will be developed for reading and writing the file (and
-# converting to other types??) etc. Borrowed IP from previous R package
-# (Kit Beyer) and Python modules (David Ding)
-#
-#
-
-#
-#
-# TO DO
-# - TEST DATA OUTPUT TO ENSURE READ AND CONVERSION ARE ACCURATE
-# - TEST LIGHT VALUES SPECIFICALLY (COMPARE TO GENEARead?)
-# - is dt.Frame necessary or is dictionary better??
+# Authors: Kit Beyer with code/ideas borrowed from David Ding
+# Date: September 2019
 # 
-#
 
 import os
 import shutil
@@ -225,6 +212,8 @@ class GENEActivFile:
     def view_data(self, start = 1, end = 900, downsample = 1,
                   temperature = True, calibrate = True, update = True):
 
+        #TO DO: test data output to ensure accuracy (light especially)
+
         '''parses a subset of the data in the file for viewing
 
         Updates the dataview attributes with values pertaining to the current
@@ -416,6 +405,11 @@ class GENEActivFile:
         
     def create_pdf(self, pdf_folder, window_hours = 4, downsample = 5):
 
+        # TODO:
+        # - fix order of pages, pngs are not inserted in the correct order
+        # because no leading zeroes in page number of filename
+        # - add date and time info
+
         '''creates a pdf summary of the file
 
 
@@ -503,7 +497,7 @@ class GENEActivFile:
 
             # initialize figure with subplots
             fig, ax = plt.subplots(6, 1)
-            fig.suptitle('PUT TIME RANGE HERE')
+            fig.suptitle(f'{start_index:09d}')
 
             # initialize subplot index
             subplot_index = 0
@@ -535,7 +529,7 @@ class GENEActivFile:
                 subplot_index += 1
 
             # save figure as .png and close
-            png_file = 'plot_' + str(start_index) + '.png'
+            png_file = 'plot_' + f'{start_index:09d}' + '.png'
             fig.savefig(os.path.join(png_folder, png_file))
             plt.close(fig)
 
@@ -575,6 +569,7 @@ class GENEActivFile:
 
         # list all .png files in temp folder
         png_files = os.listdir(png_folder)
+        png_files.sort()
 
         # loop through .png files to add to pdf
         for png_file in png_files:
@@ -592,7 +587,6 @@ class GENEActivFile:
 
             # insert .png plot into pdf
             pdf.image(png_path, x = 1, y = 15, type = 'png')
-
 
         # save pdf file
         pdf.output(pdf_path)
