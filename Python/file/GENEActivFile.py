@@ -5,15 +5,10 @@
 # (Kit Beyer) and Python modules (David Ding)
 #
 #
-# NOTES:
-# - temperature is only sampled once per page but is currently inserted at
-#   each measurement so it can be held in the same data table, this is
-#   consistent with the GENEARead R package behaviour
+
 #
 #
 # TO DO
-# - add downsample option to view_data
-# - use os for path and file concatenation, etc.
 # - TEST DATA OUTPUT TO ENSURE READ AND CONVERSION ARE ACCURATE
 # - TEST LIGHT VALUES SPECIFICALLY (COMPARE TO GENEARead?)
 # - is dt.Frame necessary or is dictionary better??
@@ -34,35 +29,92 @@ class GENEActivFile:
     '''Class for interacting with GENEActiv .bin data files.
 
 
-    Attributes:
+        Attributes
+        ----------
+        file_path : str
+            the path to the GENEActiv .bin file
+        header : dict
+            keys and values from the file header
+        pagecount : float
+            number of actual pages read from the file
+        pagecount_match : bool
+            does the pagecount match the 'Number of Pages' in the header
+        data_packet : str (hex)
+            hexadecimal string of the complete data from the file
+        dataview_start : int
+            start page of current dataview
+        dataview_end : int
+            end page of current dataview
+        dataview_sample_rate : float
+            somple rate of current dataview
+        dataview = dict
+            current dataview, one item for each signal
+
+        Methods
+        -------
+        read()
+            reads and parses header and reads hexidecimal string of data
+            
+        view_data(start = 1, end = 900, downsample = 1, temperature = True,
+                  calibrate = True, update = True)
+            parses a window of hexidecimal data previously read from
+            the file for viewing
+                  
+
+        create_pdf(pdf_folder, window_hours = 4, downsample = 5)
+            creates a pdf summary of the file
 
 
-
-    '''
+        '''
     
 
     def __init__(self, file_path):
 
-        '''initialize GENEActivFile'''
+        '''
+        Parameters
+        ----------
+        file_path : str
+            path to the GENEActiv .bin file
+        '''
 
-        self.file_path = file_path      # path to .bin file
-        self.header = {}                # header dictionary
-        self.pagecount = None           # actual pages read from file (float)
-        self.pagecount_match = None     # does pagecount read match header
-        self.data_packet = None         # hexadecimal data from entire file
-        self.dataview_start = None      # start page of current dataview
-        self.dataview_end = None        # end page of current dataview
-        self.dataview_sample_rate = None# sample rate of current dataview
-        self.dataview = None            # current dataview (subset of data)
-
+        self.file_path = file_path       # path to .bin file
+        self.header = {}                 # header dictionary
+        self.pagecount = None            # actual pages read from file (float)
+        self.pagecount_match = None      # does pagecount read match header
+        self.data_packet = None          # hexadecimal data from entire file
+        self.dataview_start = None       # start page of current dataview
+        self.dataview_end = None         # end page of current dataview
+        self.dataview_sample_rate = None # sample rate of current dataview
+        self.dataview = None             # current dataview (subset of data)
+        
 
     def read(self):
 
-        '''read text header and hex data from GENEActiv .bin file'''
+        '''reads text header and hex data from GENEActiv .bin file
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        bool
+            True if file exists and was read, False if file does not exist
+        
+        '''
 
         def read_bin():
 
-            '''read lines from a GENEActiv .bin file'''
+            '''reads text lines from a GENEActiv .bin file
+
+            Parameters
+            ----------
+            None
+            
+            Returns
+            -------
+            list
+                one string item per line in the header'''
 
             # open file
             bin_file = open(self.file_path, 'r', encoding = 'utf-8')
@@ -82,7 +134,20 @@ class GENEActivFile:
 
         def parse_header(header_packet):
 
-            '''parse the header packet read from a GENEActiv .bin file'''
+            '''parses the header packet previously read from the file
+
+            Stores the header information in the header (dict) attribute.
+
+            Parameters
+            ----------
+            header_packet : list
+                one string item per line in the header
+
+            Returns
+            -------
+            None
+
+            '''
 
             self.header = {}
 
@@ -100,7 +165,17 @@ class GENEActivFile:
 
         def check_pagecount():
 
-            '''Check to see if number of pages read matches header'''
+            '''Checks to see if number of actual pages read matches header
+
+            Parameters
+            ----------
+            None
+
+            Returns
+            -------
+            None
+
+            '''
 
             # set match to true
             self.pagecount_match = True
@@ -128,26 +203,76 @@ class GENEActivFile:
             # store pagecount as attribute
             self.pagecount = pagecount
 
+
   
-        # read header and page packet
-        header_packet = read_bin()
+        # if file exists then read it
+        if os.path.exists(self.file_path):
+            
+            # read header and page packet
+            header_packet = read_bin()
 
-        # parse header
-        parse_header(header_packet)
+            # parse header
+            parse_header(header_packet)
 
-        # confirm number of pages read matches header
-        check_pagecount()
+            # confirm number of pages read matches header
+            check_pagecount()
+
+            return True # file exists and was read
+
+        else: return False # file did not exist
 
 
     def view_data(self, start = 1, end = 900, downsample = 1,
                   temperature = True, calibrate = True, update = True):
 
-        '''parse and view a subset of the data in the file'''
+        '''parses a subset of the data in the file for viewing
+
+        Updates the dataview attributes with values pertaining to the current
+        window of data (if update is set to True).
+
+        Parameters
+        ----------
+        start : int
+            start page of window (coerced to be > 0, default = 1)
+        end : int
+            end page of window (coerced to be between start and last page,
+            default = 900)
+        downsample : int
+            factor by which to downsample (coerced into range: 1-6, default = 5) 
+        temperature : bool
+            parse temperature data? (default = True)
+            NOTE: temperature is only sampled once per page but is currently
+            inserted at each measurement consistent with GENEARead R package 
+        calibrate : bool
+            should accelerometer and light values be calibrated (default = True)
+        update : bool
+            should dataview attributes be updated? (default = True)
+
+        Returns
+        -------
+        dataview : dict
+            one item for each signal parsed
+        '''
 
         def uint2int(unsigned_value, sign_bit):
 
-            '''convert an unsigned integer (in two's complement
-            representation) to a signed integer''' 
+            '''converts an unsigned integer (in two's complement
+            representation) to a signed integer
+
+            Parameters
+            ----------
+            unsigned_value : int
+                unsigned integer value
+            sign_bit : int
+                the bit of the integer that indicates the sign (analagous to
+                the intended size of the number in bits regardless of how it is
+                actually stored)
+
+            Returns
+            -------
+            signed_value : int
+                signed integer value
+            ''' 
 
             # x + x_twos_comp = 2^N
             # x = 2^N - x_twos_comp
@@ -291,18 +416,22 @@ class GENEActivFile:
         
     def create_pdf(self, pdf_folder, window_hours = 4, downsample = 5):
 
-        '''create a pdf summary of this GENEActiv .bin file
+        '''creates a pdf summary of the file
 
 
-        Parameters:
-        pdf_folder (str):     path to folder where pdf will be stored
-        window_hours (int):   number of hours to display on each page
-                              (default = 4)
-        downsample (int):     factor by which to downsample (range: 1-6,
-                              default = 5)
+        Parameters
+        ----------
+        pdf_folder : str
+            path to folder where pdf will be stored
+        window_hours : int
+            number of hours to display on each page (default = 4)
+        downsample : int
+            factor by which to downsample (range: 1-6, default = 5)
 
-        Returns:
-        pdf_path (str):       path to pdf file created
+        Returns
+        -------
+        pdf_path : str
+            path to pdf file created
 
         '''
 
@@ -325,7 +454,7 @@ class GENEActivFile:
         # calculate sample rate and pages per plot
         sample_rate = int(self.header['Measurement Frequency'][:-3])
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
-        window_sequence = [1]#range(1, round(self.pagecount), window_pages)
+        window_sequence = range(1, round(self.pagecount), window_pages)
 
         # *******Adjust hours if not even number of pages
 
