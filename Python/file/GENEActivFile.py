@@ -289,9 +289,22 @@ class GENEActivFile:
         return dataview
 
         
-    def create_pdf(self, pdf_folder, window_hours = 4):
+    def create_pdf(self, pdf_folder, window_hours = 4, downsample = 5):
 
-        '''create a pdf summary of this GENEActiv .bin file'''
+        '''create a pdf summary of this GENEActiv .bin file
+
+
+        Parameters:
+        pdf_folder (str):     path to folder where pdf will be stored
+        window_hours (int):   number of hours to display on each page
+                              (default = 4)
+        downsample (int):     factor by which to downsample (range: 1-6,
+                              default = 5)
+
+        Returns:
+        pdf_path (str):       path to pdf file created
+
+        '''
 
         # check whether data has been read
         if not self.header or self.data_packet is None or self.pagecount is None:
@@ -299,8 +312,7 @@ class GENEActivFile:
                   'been read.')
             return
 
-        # FILE NAMES AND PATHS -----------------
-        
+        # get filenames and paths     
         bin_file = os.path.basename(self.file_path)
 
         base_file = os.path.splitext(bin_file)[0]
@@ -313,22 +325,25 @@ class GENEActivFile:
         # calculate sample rate and pages per plot
         sample_rate = int(self.header['Measurement Frequency'][:-3])
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
-        window_sequence = range(1, round(self.pagecount), window_pages)
+        window_sequence = [1]#range(1, round(self.pagecount), window_pages)
 
         # *******Adjust hours if not even number of pages
 
 
         # CREATE PLOTS ------
 
-        ###### THESE SETTINGS BELOW SHOULD BE MORE DYNAMIC#####
+        ###### THESE SETTINGS BELOW SHOULD BE MORE DYNAMIC
+        ##### based on header data#####
 
-        # set axis limits for each plot [xmin, xmax, ymin, ymax]
-        axis_lim = [[0, window_pages * 300, -8.2, 8.2],
-                    [0, window_pages * 300, -8.2, 8.2],
-                    [0, window_pages * 300, -8.2, 8.2],
-                    [0, window_pages * 300, 0, 5000],
-                    [0, window_pages * 300, 0, 1],
-                    [0, window_pages * 300, 0, 40]]
+        # set plot parameters
+        xaxis_lim = [0, window_hours * 60 * 60 * sample_rate / downsample]
+
+        yaxis_lim = [[-8.2, 8.2],
+                    [-8.2, 8.2],
+                    [-8.2, 8.2],
+                    [0, 5000],
+                    [0, 1],
+                    [0, 40]]
 
         axis_yticks = [[-8,0,8],
                        [-8,0,8],
@@ -344,34 +359,35 @@ class GENEActivFile:
         plt.rcParams['lines.linewidth'] = 0.5
         plt.rcParams['figure.figsize'] = (6, 7.5)
 
-
-
-
+        # create temp folder to store .png files
         if not os.path.exists(png_folder): os.mkdir(png_folder)
 
+        # loop through time windows to create separate plot for each
         for start_index in window_sequence:
 
+            # get data for current window
+            end_index = start_index + window_pages - 1
+            plot_data = self.view_data(start = start_index,
+                                       end = end_index,
+                                       downsample = downsample,
+                                       update = False)
+
+            # initialize figure with subplots
             fig, ax = plt.subplots(6, 1)
             fig.suptitle('PUT TIME RANGE HERE')
 
-            end_index = start_index + window_pages - 1
-
-            plot_data = self.view_data(start = start_index,
-                                       end = end_index,
-                                       update = False)
-
-            
-            
-
+            # initialize subplot index
             subplot_index = 0
 
+            # loop through subplots and generate plot
             for key in plot_data.keys():
-                
+
+                # set subplot parameters
                 ax[subplot_index].spines["top"].set_visible(False)
                 ax[subplot_index].spines["bottom"].set_visible(False)
                 ax[subplot_index].spines["right"].set_visible(False)
 
-                ax[subplot_index].axis(axis_lim[subplot_index])
+                ax[subplot_index].axis(xaxis_lim + yaxis_lim[subplot_index])
                 ax[subplot_index].get_xaxis().set_visible(False)
 
                 ax[subplot_index].set_yticks(axis_yticks[subplot_index])
@@ -380,14 +396,17 @@ class GENEActivFile:
                 ax[subplot_index].text(0.01, 0.9, key,
                                        color = axis_colour[subplot_index],
                                        transform = ax[subplot_index].transAxes)
+
+                # plot signal
                 ax[subplot_index].plot(range(len(plot_data[key])),
                                        plot_data[key],
                                        color = axis_colour[subplot_index])
 
+                # increment to next subplot
                 subplot_index += 1
 
+            # save figure as .png and close
             png_file = 'plot_' + str(start_index) + '.png'
-            
             fig.savefig(os.path.join(png_folder, png_file))
             plt.close(fig)
 
@@ -399,13 +418,12 @@ class GENEActivFile:
         # initialize pdf
         pdf = fpdf.FPDF(format = 'letter')
 
-        # add page and set font
+        # add first page and print file name at top
         pdf.add_page()
         pdf.set_font("Courier", size = 16)
-
-        # print file_name as header
         pdf.cell(200, 10, txt = bin_file, ln = 1, align = 'C', border = 0)
 
+        # set font for header info
         pdf.set_font("Courier", size = 12)
         header_text = '\n'
 
@@ -424,12 +442,15 @@ class GENEActivFile:
         # PLOT DATA PAGE -------------
 
 
-        ###### PLOTING PLOTS IN WRONG ORDER BC FILE NAMES
+        ###### PLOTTING PLOTS IN WRONG ORDER BC FILE NAMES need leading zeroes
 
+        # list all .png files in temp folder
         png_files = os.listdir(png_folder)
 
+        # loop through .png files to add to pdf
         for png_file in png_files:
 
+            # create full .png file path
             png_path = os.path.join(png_folder, png_file)
 
             # add page and set font
@@ -440,15 +461,14 @@ class GENEActivFile:
             pdf.cell(0, txt = bin_file, align = 'C')
             pdf.ln()
 
+            # insert .png plot into pdf
             pdf.image(png_path, x = 1, y = 15, type = 'png')
 
 
-        shutil.rmtree(png_folder)
-
-    
-
-        # output to pdf file
+        # save pdf file
         pdf.output(pdf_path)
-                                     
 
+        # delete temp .png files
+        shutil.rmtree(png_folder)
+                                     
         return pdf_path
