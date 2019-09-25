@@ -1,13 +1,14 @@
-# Authors: Kit Beyer with code/ideas borrowed from David Ding
+# Authors: Kit Beyer with code/ideas borrowed from David Ding and Kyle Weber
 # Date: September 2019
-# 
 
 import os
 import shutil
 import datatable as dt
+import datetime
 import fpdf
 import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle
+import pprint
 
 mplstyle.use('fast')
 
@@ -56,6 +57,8 @@ class GENEActivFile:
     
 
     def __init__(self, file_path):
+
+        # self.dataview as dt.Frame of dictionary??
 
         '''
         Parameters
@@ -212,7 +215,12 @@ class GENEActivFile:
     def view_data(self, start = 1, end = 900, downsample = 1,
                   temperature = True, calibrate = True, update = True):
 
-        #TO DO: test data output to ensure accuracy (light especially)
+        #TO DO:
+        # - test data output to ensure accuracy (light especially)
+        # - add time (page time or start time??)
+        # - confirm dictionary item lengths equal
+        # - adjust for clock drift
+        # - start and end by time (find last page w page time < start)
 
         '''parses a subset of the data in the file for viewing
 
@@ -301,7 +309,8 @@ class GENEActivFile:
         elif downsample > 6: downsample = 6
         
         # initialize dataview
-        dataview = {"accel_x" : [],
+        dataview = {"time" : [],
+                    "accel_x" : [],
                     "accel_y" : [],
                     "accel_z" : [],
                     "light"   : [],
@@ -317,10 +326,28 @@ class GENEActivFile:
             z_offset = int(self.header['z offset'])
             lux = int(self.header['Lux'])
             volts = int(self.header['Volts'])
+
+        # grab chunk of page times from packet
+        time_chunk = [self.data_packet[i]
+                    for i in range((start - 1) * 10 + 3, end * 10, 10)]
+
+        # loop through pages
+        for time_line in time_chunk:
+
+            # get page time
+            colon = time_line.index(':')
+            page_time = time_line[colon + 1:]
+            page_time = datetime.datetime.strptime(page_time, '%Y-%m-%d %H:%M:%S:%f')
+
+            times = [page_time + datetime.timedelta(seconds = i / 75)
+                 for i in range(300)]
+
+            dataview['time'].extend(times)      
             
+
         # grab chunk of data from packet
         data_chunk = [self.data_packet[i]
-                    for i in range(start * 10 - 1, end * 10, 10)]
+                    for i in range((start - 1) * 10 + 9, end * 10, 10)]
         
         # loop through pages
         for data_line in data_chunk:
@@ -448,7 +475,7 @@ class GENEActivFile:
         # calculate sample rate and pages per plot
         sample_rate = int(self.header['Measurement Frequency'][:-3])
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
-        window_sequence = range(1, round(self.pagecount), window_pages)
+        window_sequence = [1]#range(1, round(self.pagecount), window_pages)
 
         # *******Adjust hours if not even number of pages
 
@@ -503,7 +530,7 @@ class GENEActivFile:
             subplot_index = 0
 
             # loop through subplots and generate plot
-            for key in plot_data.keys():
+            for key in list(plot_data.keys())[1:]:
 
                 # set subplot parameters
                 ax[subplot_index].spines["top"].set_visible(False)
