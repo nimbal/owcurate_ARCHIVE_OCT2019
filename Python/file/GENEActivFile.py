@@ -7,10 +7,11 @@ import datatable as dt
 import datetime
 import fpdf
 import matplotlib.pyplot as plt
-import matplotlib.style as mplstyle
-import pprint
+import matplotlib.style as mstyle
+import matplotlib.dates as mdates
 
-mplstyle.use('fast')
+mstyle.use('fast')
+
 
 class GENEActivFile:
 
@@ -193,8 +194,6 @@ class GENEActivFile:
             # store pagecount as attribute
             self.pagecount = pagecount
 
-
-  
         # if file exists then read it
         if os.path.exists(self.file_path):
             
@@ -319,9 +318,6 @@ class GENEActivFile:
                             downsample)
         meas_per_page = int(300 / downsample)
 
-        print(downsampled_rate)
-        print(meas_per_page)
-
         # get calibration variables from header
         if calibrate:
             x_gain = int(self.header['x gain'])
@@ -347,7 +343,8 @@ class GENEActivFile:
 
             # generate timestamps
             times = [page_time + datetime.timedelta(seconds = i / downsampled_rate)
-                 for i in range(meas_per_page)]
+                      for i in range(meas_per_page)]
+            #times = [t.strftime('%Y-%m-%d %H:%M:%S.%f') for t in times]
 
             dataview['time'].extend(times)      
             
@@ -437,6 +434,9 @@ class GENEActivFile:
         
     def create_pdf(self, pdf_folder, window_hours = 4, downsample = 5):
 
+
+        ### DOUBLES PLOT TIME TO ADD DATES
+
         '''creates a pdf summary of the file
 
 
@@ -475,7 +475,7 @@ class GENEActivFile:
         # calculate sample rate and pages per plot
         sample_rate = int(self.header['Measurement Frequency'][:-3])
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
-        window_sequence = [1]#range(1, round(self.pagecount), window_pages)
+        window_sequence = range(1, round(self.pagecount), window_pages)
 
         # *******Adjust hours if not even number of pages
 
@@ -485,8 +485,12 @@ class GENEActivFile:
         ###### THESE SETTINGS BELOW SHOULD BE MORE DYNAMIC
         ##### based on header data#####
 
+        # define date locators and formatters
+        hours = mdates.HourLocator()
+        hours_fmt = mdates.DateFormatter('%H:%M')
+
+
         # set plot parameters
-        xaxis_lim = [0, window_hours * 60 * 60 * sample_rate / downsample]
 
         yaxis_lim = [[-8.2, 8.2],
                     [-8.2, 8.2],
@@ -495,16 +499,16 @@ class GENEActivFile:
                     [0, 1],
                     [15, 40]]
 
-        axis_yticks = [[-8,0,8],
+        yaxis_ticks = [[-8,0,8],
                        [-8,0,8],
                        [-8,0,8],
                        [0,5000],
                        [0,1],
-                       [0,40]]
+                       [20,40]]
 
-        axis_ylabel = ['g', 'g', 'g', 'lux', '', 'deg C']
+        yaxis_label = ['g', 'g', 'g', 'lux', '', 'deg C']
 
-        axis_colour = ['b', 'g', 'r', 'c', 'm', 'y']
+        line_color = ['b', 'g', 'r', 'c', 'm', 'y']
 
         plt.rcParams['lines.linewidth'] = 0.5
         plt.rcParams['figure.figsize'] = (6, 7.5)
@@ -526,16 +530,18 @@ class GENEActivFile:
 
             # format start and end date for current window
             time_format = '%b %-d, %Y (%A) @ %H:%M:%S.%f'
-            window_start = plot_data['time'][0].strftime(time_format)[:-3] 
-            window_end = plot_data['time'][-1].strftime(time_format)[:-3]
+            window_start = plot_data['time'][0]
+            window_start_txt = window_start.strftime(time_format)[:-3]
+
+            window_end = plot_data['time'][-1]
+            window_end_txt = window_end.strftime(time_format)[:-3]
 
             # initialize figure with subplots
             fig, ax = plt.subplots(6, 1)
 
             # insert date range as plot title
-        
-            fig.suptitle(f'{window_start} to {window_end}', fontsize = 8, y = 0.96)
-            #fig.tight_layout()
+            fig.suptitle(f'{window_start_txt} to {window_end_txt}',
+                         fontsize = 8, y = 0.96)
 
             # initialize subplot index
             subplot_index = 0
@@ -543,25 +549,38 @@ class GENEActivFile:
             # loop through subplots and generate plot
             for key in list(plot_data.keys())[1:]:
 
-                # set subplot parameters
-                ax[subplot_index].spines["top"].set_visible(False)
-                ax[subplot_index].spines["bottom"].set_visible(False)
-                ax[subplot_index].spines["right"].set_visible(False)
-
-                ax[subplot_index].axis(xaxis_lim + yaxis_lim[subplot_index])
-                ax[subplot_index].get_xaxis().set_visible(False)
-
-                ax[subplot_index].set_yticks(axis_yticks[subplot_index])
-                ax[subplot_index].set_ylabel(axis_ylabel[subplot_index])
-
-                ax[subplot_index].text(0.01, 0.9, key,
-                                       color = axis_colour[subplot_index],
-                                       transform = ax[subplot_index].transAxes)
-
                 # plot signal
-                ax[subplot_index].plot(plot_data['time'],#range(len(plot_data[key])),
+                ax[subplot_index].plot(plot_data['time'],
                                        plot_data[key],
-                                       color = axis_colour[subplot_index])
+                                       color = line_color[subplot_index])
+                
+                # remove box around plot
+                ax[subplot_index].spines['top'].set_visible(False)
+                ax[subplot_index].spines['bottom'].set_visible(False)
+                ax[subplot_index].spines['right'].set_visible(False)
+
+                # set axis ticks and labels
+                ax[subplot_index].xaxis.set_major_locator(hours)
+                ax[subplot_index].xaxis.set_major_formatter(hours_fmt)
+                if subplot_index != 5:
+                    ax[subplot_index].set_xticklabels([])
+
+                ax[subplot_index].set_yticks(yaxis_ticks[subplot_index])
+                ax[subplot_index].set_ylabel(yaxis_label[subplot_index])
+
+                ax[subplot_index].grid(True, 'major', 'x',
+                                       color = 'k', linestyle = '--')
+
+                # set axis limits
+                ax[subplot_index].set_ylim(yaxis_lim[subplot_index])
+                ax[subplot_index].set_xlim(window_start,
+                                           window_start +
+                                           datetime.timedelta(hours = 4))
+
+                # add plot label
+                ax[subplot_index].text(0.01, 0.9, key,
+                                       color = line_color[subplot_index],
+                                       transform = ax[subplot_index].transAxes)
 
                 # increment to next subplot
                 subplot_index += 1
