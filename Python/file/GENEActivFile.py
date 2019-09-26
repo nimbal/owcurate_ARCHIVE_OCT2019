@@ -217,7 +217,6 @@ class GENEActivFile:
 
         #TO DO:
         # - test data output to ensure accuracy (light especially)
-        # - add time (page time or start time??)
         # - confirm dictionary item lengths equal
         # - adjust for clock drift
         # - start and end by time (find last page w page time < start)
@@ -316,6 +315,13 @@ class GENEActivFile:
                     "light"   : [],
                     "button"  : []}
 
+        downsampled_rate = (int(self.header['Measurement Frequency'][:-3]) /
+                            downsample)
+        meas_per_page = int(300 / downsample)
+
+        print(downsampled_rate)
+        print(meas_per_page)
+
         # get calibration variables from header
         if calibrate:
             x_gain = int(self.header['x gain'])
@@ -339,8 +345,9 @@ class GENEActivFile:
             page_time = time_line[colon + 1:]
             page_time = datetime.datetime.strptime(page_time, '%Y-%m-%d %H:%M:%S:%f')
 
-            times = [page_time + datetime.timedelta(seconds = i / 75)
-                 for i in range(300)]
+            # generate timestamps
+            times = [page_time + datetime.timedelta(seconds = i / downsampled_rate)
+                 for i in range(meas_per_page)]
 
             dataview['time'].extend(times)      
             
@@ -402,15 +409,13 @@ class GENEActivFile:
             for temp_line in temp_chunk:
                 colon = temp_line.index(':')
                 dataview['temp'].extend(
-                    [float(temp_line[colon + 1:])] * round(300 / downsample))
+                    [float(temp_line[colon + 1:])] * round(meas_per_page))
 
         # update object attributes
         if update:
             self.dataview_start = start
             self.dataview_end = end
-            self.dataview_sample_rate = (
-                int(self.header['Measurement Frequency'][:-3]) /
-                      downsample)
+            self.dataview_sample_rate = downsampled_rate
             self.dataview = dt.Frame(dataview)
 
         # display message if start and end values were changed
@@ -431,11 +436,6 @@ class GENEActivFile:
 
         
     def create_pdf(self, pdf_folder, window_hours = 4, downsample = 5):
-
-        # TODO:
-        # - fix order of pages, pngs are not inserted in the correct order
-        # because no leading zeroes in page number of filename
-        # - add date and time info
 
         '''creates a pdf summary of the file
 
@@ -493,7 +493,7 @@ class GENEActivFile:
                     [-8.2, 8.2],
                     [0, 5000],
                     [0, 1],
-                    [0, 40]]
+                    [15, 40]]
 
         axis_yticks = [[-8,0,8],
                        [-8,0,8],
@@ -508,6 +508,8 @@ class GENEActivFile:
 
         plt.rcParams['lines.linewidth'] = 0.5
         plt.rcParams['figure.figsize'] = (6, 7.5)
+        plt.rcParams['figure.subplot.top'] = 0.92
+        plt.rcParams['figure.subplot.bottom'] = 0.05
 
         # create temp folder to store .png files
         if not os.path.exists(png_folder): os.mkdir(png_folder)
@@ -522,9 +524,18 @@ class GENEActivFile:
                                        downsample = downsample,
                                        update = False)
 
+            # format start and end date for current window
+            time_format = '%b %-d, %Y (%A) @ %H:%M:%S.%f'
+            window_start = plot_data['time'][0].strftime(time_format)[:-3] 
+            window_end = plot_data['time'][-1].strftime(time_format)[:-3]
+
             # initialize figure with subplots
             fig, ax = plt.subplots(6, 1)
-            fig.suptitle(f'{start_index:09d}')
+
+            # insert date range as plot title
+        
+            fig.suptitle(f'{window_start} to {window_end}', fontsize = 8, y = 0.96)
+            #fig.tight_layout()
 
             # initialize subplot index
             subplot_index = 0
@@ -548,7 +559,7 @@ class GENEActivFile:
                                        transform = ax[subplot_index].transAxes)
 
                 # plot signal
-                ax[subplot_index].plot(range(len(plot_data[key])),
+                ax[subplot_index].plot(plot_data['time'],#range(len(plot_data[key])),
                                        plot_data[key],
                                        color = axis_colour[subplot_index])
 
