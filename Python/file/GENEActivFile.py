@@ -212,15 +212,14 @@ class GENEActivFile:
         else: return False # file did not exist
 
 
-    def view_data(self, start = 1, end = 900, downsample = 1,
+    def view_data(self, start = 1, end = -1, downsample = 1,
                   temperature = True, calibrate = True, update = True):
 
         #TO DO:
         # - test to ensure values are correct (compare to GENEAread R package)
-        # - why are light values greater than max in header (light values match
-        #   those output by GENEAread R package)
-        # - how to view all data (end = -1 ?? default??)
-        # - confirm dictionary item lengths equal
+        # - values may be outside range stated in header (confirmed by
+        #   GENEAread R package)
+        # - confirm dictionary item lengths equal ?
         # - option to adjust for clock drift (synchronize) ?
         # - start and end by time (find last page w page time < start)
         # - add option to return battery voltage??
@@ -236,7 +235,7 @@ class GENEActivFile:
             start page of window (coerced to be > 0, default = 1)
         end : int
             end page of window (coerced to be between start and last page,
-            default = 900)
+            default = -1 = read all pages)
         downsample : int
             factor by which to downsample (coerced into range: 1-6, default = 5) 
         temperature : bool
@@ -304,8 +303,8 @@ class GENEActivFile:
         if start < 1: start = 1
         elif start > self.pagecount: start = round(self.pagecount)
 
-        if end < start: end = start
-        elif end > self.pagecount: end = round(self.pagecount)
+        if end == -1 or end > self.pagecount: end = round(self.pagecount)
+        elif end < start: end = start
 
         #check downsample for valid values
         if downsample < 1: downsample = 1
