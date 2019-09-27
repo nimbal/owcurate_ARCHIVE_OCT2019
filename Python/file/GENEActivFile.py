@@ -59,7 +59,8 @@ class GENEActivFile:
 
     def __init__(self, file_path):
 
-        # self.dataview as dt.Frame of dictionary??
+        # TODO:
+        # - decide on best way of storing dataview (dictionary, numpy, pandas, datatable?)
 
         '''
         Parameters
@@ -215,10 +216,14 @@ class GENEActivFile:
                   temperature = True, calibrate = True, update = True):
 
         #TO DO:
-        # - test data output to ensure accuracy (light especially)
+        # - test to ensure values are correct (compare to GENEAread R package)
+        # - why are light values greater than max in header (light values match
+        #   those output by GENEAread R package)
+        # - how to view all data (end = -1 ?? default??)
         # - confirm dictionary item lengths equal
-        # - adjust for clock drift
+        # - option to adjust for clock drift (synchronize) ?
         # - start and end by time (find last page w page time < start)
+        # - add option to return battery voltage??
 
         '''parses a subset of the data in the file for viewing
 
@@ -434,8 +439,8 @@ class GENEActivFile:
         
     def create_pdf(self, pdf_folder, window_hours = 4, downsample = 5):
 
-
-        ### DOUBLES PLOT TIME TO ADD DATES
+        # TODO:
+        # - DOUBLES PLOT TIME TO ADD DATES AS DATETIME TYPE
 
         '''creates a pdf summary of the file
 
@@ -445,7 +450,9 @@ class GENEActivFile:
         pdf_folder : str
             path to folder where pdf will be stored
         window_hours : int
-            number of hours to display on each page (default = 4)
+            number of hours to display on each page (default = 4) -- if hour occurs
+            in the middle of a data page then time displayed on each pdf page may
+            be slightly less than the number of hours specified
         downsample : int
             factor by which to downsample (range: 1-6, default = 5)
 
@@ -477,8 +484,6 @@ class GENEActivFile:
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
         window_sequence = range(1, round(self.pagecount), window_pages)
 
-        # *******Adjust hours if not even number of pages
-
 
         # CREATE PLOTS ------
 
@@ -489,31 +494,50 @@ class GENEActivFile:
         hours = mdates.HourLocator()
         hours_fmt = mdates.DateFormatter('%H:%M')
 
-
         # set plot parameters
 
-        yaxis_lim = [[-8.2, 8.2],
-                    [-8.2, 8.2],
-                    [-8.2, 8.2],
-                    [0, 5000],
+        to_index = self.header['Accelerometer Range'].index('to')
+        accel_min = float(self.header['Accelerometer Range'][:to_index -1 ])
+        accel_max = float(self.header['Accelerometer Range'][to_index + 3:])
+
+        to_index = self.header['Light Meter Range'].index('to')
+        light_min = float(self.header['Light Meter Range'][:to_index -1 ])
+        light_max = float(self.header['Light Meter Range'][to_index + 3:])
+
+        accel_range = accel_max - accel_min
+        accel_buffer = accel_range * 0.1
+
+        light_range = light_max - light_min
+        light_buffer = light_range * 0.1
+                       
+        yaxis_lim = [[accel_min - accel_buffer, accel_max + accel_buffer],
+                    [accel_min - accel_buffer, accel_max + accel_buffer],
+                    [accel_min - accel_buffer, accel_max + accel_buffer],
+                    [light_min - light_buffer, light_max + light_buffer],
                     [0, 1],
-                    [15, 40]]
+                    [10, 40]]
 
-        yaxis_ticks = [[-8,0,8],
-                       [-8,0,8],
-                       [-8,0,8],
-                       [0,5000],
-                       [0,1],
-                       [20,40]]
+        yaxis_ticks = [[accel_min, 0, accel_max],
+                       [accel_min, 0, accel_max],
+                       [accel_min, 0, accel_max],
+                       [light_min, light_max],
+                       [0, 1],
+                       [10, 20, 30, 40]]
 
-        yaxis_label = ['g', 'g', 'g', 'lux', '', 'deg C']
+        yaxis_units = [self.header['Accelerometer Units'],
+                       self.header['Accelerometer Units'],
+                       self.header['Accelerometer Units'],
+                       self.header['Light Meter Units'],
+                       '',
+                       self.header['Temperature Sensor Units']]
 
         line_color = ['b', 'g', 'r', 'c', 'm', 'y']
 
-        plt.rcParams['lines.linewidth'] = 0.5
+        plt.rcParams['lines.linewidth'] = 0.25
         plt.rcParams['figure.figsize'] = (6, 7.5)
         plt.rcParams['figure.subplot.top'] = 0.92
-        plt.rcParams['figure.subplot.bottom'] = 0.05
+        plt.rcParams['figure.subplot.bottom'] = 0.06
+        plt.rcParams['font.size'] = 8
 
         # create temp folder to store .png files
         if not os.path.exists(png_folder): os.mkdir(png_folder)
@@ -566,21 +590,25 @@ class GENEActivFile:
                     ax[subplot_index].set_xticklabels([])
 
                 ax[subplot_index].set_yticks(yaxis_ticks[subplot_index])
-                ax[subplot_index].set_ylabel(yaxis_label[subplot_index])
+                units = yaxis_units[subplot_index]
+                ax[subplot_index].set_ylabel(f'{key} ({units})')
 
+
+                # set vertical lines on plot at hours
                 ax[subplot_index].grid(True, 'major', 'x',
                                        color = 'k', linestyle = '--')
+
+                # set horizontal lines on plot at zero and limits
+                if subplot_index < 4:
+                    for tick in yaxis_ticks[subplot_index]:
+                        ax[subplot_index].axhline(y = tick, color = 'grey',
+                                                  linestyle = '-')
 
                 # set axis limits
                 ax[subplot_index].set_ylim(yaxis_lim[subplot_index])
                 ax[subplot_index].set_xlim(window_start,
                                            window_start +
                                            datetime.timedelta(hours = 4))
-
-                # add plot label
-                ax[subplot_index].text(0.01, 0.9, key,
-                                       color = line_color[subplot_index],
-                                       transform = ax[subplot_index].transAxes)
 
                 # increment to next subplot
                 subplot_index += 1
@@ -617,12 +645,7 @@ class GENEActivFile:
         # print header to pdf
         pdf.multi_cell(200, 5, txt = header_text, align = 'L')
 
-
-
-        # PLOT DATA PAGE -------------
-
-
-        ###### PLOTTING PLOTS IN WRONG ORDER BC FILE NAMES need leading zeroes
+        # PLOT DATA PAGES -------------
 
         # list all .png files in temp folder
         png_files = os.listdir(png_folder)
@@ -643,7 +666,9 @@ class GENEActivFile:
             pdf.ln()
 
             # insert .png plot into pdf
-            pdf.image(png_path, x = 1, y = 15, type = 'png')
+            pdf.image(png_path, x = 1, y = 12, type = 'png')
+
+        # SAVE PDF AND DELETE PNGS --------------
 
         # save pdf file
         pdf.output(pdf_path)
