@@ -513,8 +513,8 @@ class GENEActivFile:
                     [accel_min - accel_buffer, accel_max + accel_buffer],
                     [accel_min - accel_buffer, accel_max + accel_buffer],
                     [light_min - light_buffer, light_max + light_buffer],
-                    [0, 1],
-                    [10, 40]]
+                    [-0.01, 1],
+                    [9.99, 40.01]]
 
         yaxis_ticks = [[accel_min, 0, accel_max],
                        [accel_min, 0, accel_max],
