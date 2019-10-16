@@ -78,6 +78,8 @@ class GENEActivFile:
         self.accel_y_max = None          # accelerometer y maximum value
         self.accel_z_min = None          # accelerometer z minimum value
         self.accel_z_max = None          # accelerometer z maximum value
+        self.light_min = None            # light minimum value
+        self.light_max = None            # light maximum value
         self.data_packet = None          # hexadecimal data from entire file
         self.dataview_start = None       # start page of current dataview
         self.dataview_end = None         # end page of current dataview
@@ -200,7 +202,7 @@ class GENEActivFile:
             # store pagecount as attribute
             self.pagecount = pagecount
 
-        def calculate_ranges():
+        def calc_ranges():
 
             '''Calculates actual accelerometer min and max values
 
@@ -232,6 +234,14 @@ class GENEActivFile:
             self.accel_z_max = ((204700 - int(self.header['z offset'])) /
                                 int(self.header['z gain']))
 
+            self.light_min = (0 * int(self.header['Lux']) /
+                              int(self.header['Volts']))
+
+            self.light_max = (1023 * int(self.header['Lux']) /
+                              int(self.header['Volts']))
+
+            
+
 
         # if file exists then read it
         if os.path.exists(self.file_path):
@@ -246,7 +256,7 @@ class GENEActivFile:
             check_pagecount()
 
             # calculate accelerometer ranges
-            calculate_ranges()
+            calc_ranges()
 
             return True # file exists and was read
 
@@ -525,7 +535,7 @@ class GENEActivFile:
         # calculate sample rate and pages per plot
         sample_rate = int(self.header['Measurement Frequency'][:-3])
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
-        window_sequence = range(1, round(self.pagecount), window_pages)
+        window_sequence = [1]#range(1, round(self.pagecount), window_pages)
 
 
         # CREATE PLOTS ------
@@ -546,9 +556,8 @@ class GENEActivFile:
         accel_range = accel_max - accel_min
         accel_buffer = accel_range * 0.1
 
-        to_index = self.header['Light Meter Range'].index('to')
-        light_min = float(self.header['Light Meter Range'][:to_index -1 ])
-        light_max = float(self.header['Light Meter Range'][to_index + 3:])
+        light_min = self.light_min
+        light_max = self.light_max
 
         light_range = light_max - light_min
         light_buffer = light_range * 0.1
@@ -563,7 +572,7 @@ class GENEActivFile:
         yaxis_ticks = [[-8, 0, 8],
                        [-8, 0, 8],
                        [-8, 0, 8],
-                       [light_min, light_max],
+                       [0, 10000, 20000, 30000],
                        [0, 1],
                        [10, 20, 30, 40]]
 
