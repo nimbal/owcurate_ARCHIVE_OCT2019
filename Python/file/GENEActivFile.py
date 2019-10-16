@@ -72,8 +72,12 @@ class GENEActivFile:
         self.header = {}                 # header dictionary
         self.pagecount = None            # actual pages read from file (float)
         self.pagecount_match = None      # does pagecount read match header
-        self.accel_min = []              # accelerometer minimum values [x, y, z]
-        self.accel_max = []              # accelerometer maximum values [x, y, z]
+        self.accel_x_min = None          # accelerometer x minimum value
+        self.accel_x_max = None          # accelerometer x maximum value
+        self.accel_y_min = None          # accelerometer y minimum value
+        self.accel_y_max = None          # accelerometer y maximum value
+        self.accel_z_min = None          # accelerometer z minimum value
+        self.accel_z_max = None          # accelerometer z maximum value
         self.data_packet = None          # hexadecimal data from entire file
         self.dataview_start = None       # start page of current dataview
         self.dataview_end = None         # end page of current dataview
@@ -480,7 +484,6 @@ class GENEActivFile:
 
         # TODO:
         # - DOUBLES PLOT TIME TO ADD DATES AS DATETIME TYPE
-        # - move down plot (underscores cut off on data pages)
 
         '''creates a pdf summary of the file
 
@@ -538,22 +541,18 @@ class GENEActivFile:
         # and the offset and gain values (-8 to 8 stated in the header is just
         # a minimum range, actual range is slightly larger)
 
-        ## UPDATE THESE VALUES AND SET AXIS TICKS AND LINES APPROPRIATELY
-        
-        to_index = self.header['Accelerometer Range'].index('to')
-        accel_min = float(self.header['Accelerometer Range'][:to_index - 1 ])
-        accel_max = float(self.header['Accelerometer Range'][to_index + 3:])
+        accel_min = min([self.accel_x_min, self.accel_y_min, self.accel_z_min])
+        accel_max = max([self.accel_x_max, self.accel_y_max, self.accel_z_max])        
+        accel_range = accel_max - accel_min
+        accel_buffer = accel_range * 0.1
 
         to_index = self.header['Light Meter Range'].index('to')
         light_min = float(self.header['Light Meter Range'][:to_index -1 ])
         light_max = float(self.header['Light Meter Range'][to_index + 3:])
 
-        accel_range = accel_max - accel_min
-        accel_buffer = accel_range * 0.1
-
         light_range = light_max - light_min
         light_buffer = light_range * 0.1
-                       
+                        
         yaxis_lim = [[accel_min - accel_buffer, accel_max + accel_buffer],
                     [accel_min - accel_buffer, accel_max + accel_buffer],
                     [accel_min - accel_buffer, accel_max + accel_buffer],
@@ -561,9 +560,9 @@ class GENEActivFile:
                     [-0.01, 1],
                     [9.99, 40.01]]
 
-        yaxis_ticks = [[accel_min, 0, accel_max],
-                       [accel_min, 0, accel_max],
-                       [accel_min, 0, accel_max],
+        yaxis_ticks = [[-8, 0, 8],
+                       [-8, 0, 8],
+                       [-8, 0, 8],
                        [light_min, light_max],
                        [0, 1],
                        [10, 20, 30, 40]]
@@ -574,6 +573,12 @@ class GENEActivFile:
                        self.header['Light Meter Units'],
                        '',
                        self.header['Temperature Sensor Units']]
+
+        yaxis_lines = [[self.accel_x_min, 0, self.accel_x_max],
+                       [self.accel_y_min, 0, self.accel_y_max],
+                       [self.accel_z_min, 0, self.accel_z_max],
+                       [light_min, light_max]]
+                       
 
         line_color = ['b', 'g', 'r', 'c', 'm', 'y']
 
@@ -644,8 +649,8 @@ class GENEActivFile:
 
                 # set horizontal lines on plot at zero and limits
                 if subplot_index < 4:
-                    for tick in yaxis_ticks[subplot_index]:
-                        ax[subplot_index].axhline(y = tick, color = 'grey',
+                    for yline in yaxis_lines[subplot_index]:
+                        ax[subplot_index].axhline(y = yline, color = 'grey',
                                                   linestyle = '-')
 
                 # set axis limits
