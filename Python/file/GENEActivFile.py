@@ -3,7 +3,6 @@
 
 import os
 import shutil
-import datatable as dt
 import datetime
 import fpdf
 import matplotlib.pyplot as plt
@@ -54,7 +53,7 @@ class GENEActivFile:
             creates a pdf summary of the file
 
 
-        '''
+    '''
     
 
     def __init__(self, file_path):
@@ -73,6 +72,8 @@ class GENEActivFile:
         self.header = {}                 # header dictionary
         self.pagecount = None            # actual pages read from file (float)
         self.pagecount_match = None      # does pagecount read match header
+        self.accel_min = []              # accelerometer minimum values [x, y, z]
+        self.accel_max = []              # accelerometer maximum values [x, y, z]
         self.data_packet = None          # hexadecimal data from entire file
         self.dataview_start = None       # start page of current dataview
         self.dataview_end = None         # end page of current dataview
@@ -195,6 +196,39 @@ class GENEActivFile:
             # store pagecount as attribute
             self.pagecount = pagecount
 
+        def calculate_ranges():
+
+            '''Calculates actual accelerometer min and max values
+
+            Parameters
+            ----------
+            None
+
+            Returns
+            -------
+            None
+
+            '''
+
+            self.accel_x_min = ((-204800 - int(self.header['x offset'])) /
+                                int(self.header['x gain']))
+
+            self.accel_y_min = ((-204800 - int(self.header['y offset'])) /
+                                int(self.header['y gain']))
+
+            self.accel_z_min = ((-204800 - int(self.header['z offset'])) /
+                                int(self.header['z gain']))
+
+            self.accel_x_max = ((204700 - int(self.header['x offset'])) /
+                                int(self.header['x gain']))
+
+            self.accel_y_max = ((204700 - int(self.header['y offset'])) /
+                                int(self.header['y gain']))
+
+            self.accel_z_max = ((204700 - int(self.header['z offset'])) /
+                                int(self.header['z gain']))
+
+
         # if file exists then read it
         if os.path.exists(self.file_path):
             
@@ -207,9 +241,16 @@ class GENEActivFile:
             # confirm number of pages read matches header
             check_pagecount()
 
+            # calculate accelerometer ranges
+            calculate_ranges()
+
             return True # file exists and was read
 
-        else: return False # file did not exist
+        else:
+
+            print(f"****** WARNING: {self.file_path} does not exist.\n")
+
+            return False # file did not exist
 
 
     def view_data(self, start = 1, end = -1, downsample = 1,
@@ -217,10 +258,9 @@ class GENEActivFile:
 
         #TO DO:
         # - test to ensure values are correct (compare to GENEAread R package)
-        # - values may be outside range stated in header (confirmed by
-        #   GENEAread R package)
         # - confirm dictionary item lengths equal ?
-        # - option to adjust for clock drift (synchronize) ?
+        # - option to adjust for clock drift (synchronize) - just adjust
+        # actual sample rate based on clock drift ?
         # - start and end by time (find last page w page time < start)
         # - add option to return battery voltage??
 
@@ -417,7 +457,7 @@ class GENEActivFile:
             self.dataview_start = start
             self.dataview_end = end
             self.dataview_sample_rate = downsampled_rate
-            self.dataview = dt.Frame(dataview)
+            self.dataview = dataview
 
         # display message if start and end values were changed
         if old_start != start or old_end != end:
@@ -440,6 +480,7 @@ class GENEActivFile:
 
         # TODO:
         # - DOUBLES PLOT TIME TO ADD DATES AS DATETIME TYPE
+        # - move down plot (underscores cut off on data pages)
 
         '''creates a pdf summary of the file
 
@@ -486,17 +527,21 @@ class GENEActivFile:
 
         # CREATE PLOTS ------
 
-        ###### THESE SETTINGS BELOW SHOULD BE MORE DYNAMIC
-        ##### based on header data#####
-
         # define date locators and formatters
         hours = mdates.HourLocator()
         hours_fmt = mdates.DateFormatter('%H:%M')
 
         # set plot parameters
 
+
+        # each accel axis has a different min and max based on the digital range
+        # and the offset and gain values (-8 to 8 stated in the header is just
+        # a minimum range, actual range is slightly larger)
+
+        ## UPDATE THESE VALUES AND SET AXIS TICKS AND LINES APPROPRIATELY
+        
         to_index = self.header['Accelerometer Range'].index('to')
-        accel_min = float(self.header['Accelerometer Range'][:to_index -1 ])
+        accel_min = float(self.header['Accelerometer Range'][:to_index - 1 ])
         accel_max = float(self.header['Accelerometer Range'][to_index + 3:])
 
         to_index = self.header['Light Meter Range'].index('to')
@@ -634,7 +679,7 @@ class GENEActivFile:
         pdf.set_font("Courier", size = 12)
         header_text = '\n'
 
-        # find lenght of longest key in header
+        # find length of longest key in header
         key_length = max(len(key) for key in self.header.keys()) + 1
 
         # create text string for header information
@@ -665,7 +710,7 @@ class GENEActivFile:
             pdf.ln()
 
             # insert .png plot into pdf
-            pdf.image(png_path, x = 1, y = 12, type = 'png')
+            pdf.image(png_path, x = 1, y = 13, type = 'png')
 
         # SAVE PDF AND DELETE PNGS --------------
 
