@@ -535,7 +535,7 @@ class GENEActivFile:
         # calculate sample rate and pages per plot
         sample_rate = int(self.header['Measurement Frequency'][:-3])
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
-        window_sequence = [1]#range(1, round(self.pagecount), window_pages)
+        window_sequence = range(1, round(self.pagecount), window_pages)
 
 
         # CREATE PLOTS ------
