@@ -16,41 +16,39 @@ class GENEActivFile:
 
     '''Class for interacting with GENEActiv .bin data files.
 
+    Attributes
+    ----------
+    file_path : str
+        the path to the GENEActiv .bin file
+    header : dict
+        keys and values from the file header
+    pagecount : float
+        number of actual pages read from the file
+    pagecount_match : bool
+        does the pagecount match the 'Number of Pages' in the header
+    data_packet : str (hex)
+        hexadecimal string of the complete data from the file
+    dataview_start : int
+        start page of current dataview
+    dataview_end : int
+        end page of current dataview
+    dataview_sample_rate : float
+        somple rate of current dataview
+    dataview = dict
+        current dataview, one item for each signal
 
-        Attributes
-        ----------
-        file_path : str
-            the path to the GENEActiv .bin file
-        header : dict
-            keys and values from the file header
-        pagecount : float
-            number of actual pages read from the file
-        pagecount_match : bool
-            does the pagecount match the 'Number of Pages' in the header
-        data_packet : str (hex)
-            hexadecimal string of the complete data from the file
-        dataview_start : int
-            start page of current dataview
-        dataview_end : int
-            end page of current dataview
-        dataview_sample_rate : float
-            somple rate of current dataview
-        dataview = dict
-            current dataview, one item for each signal
-
-        Methods
-        -------
-        read()
-            reads and parses header and reads hexidecimal string of data
-            
-        view_data(start = 1, end = 900, downsample = 1, temperature = True,
-                  calibrate = True, update = True)
-            parses a window of hexidecimal data previously read from
-            the file for viewing
-                  
-
-        create_pdf(pdf_folder, window_hours = 4, downsample = 5)
-            creates a pdf summary of the file
+    Methods
+    -------
+    read()
+        reads and parses header and reads hexidecimal string of data
+        
+    view_data(start = 1, end = 900, downsample = 1, temperature = True,
+              calibrate = True, update = True)
+        parses a window of hexidecimal data previously read from
+        the file for viewing
+              
+    create_pdf(pdf_folder, window_hours = 4, downsample = 5)
+        creates a pdf summary of the file
 
 
     '''
@@ -239,8 +237,6 @@ class GENEActivFile:
 
             self.light_max = (1023 * int(self.header['Lux']) /
                               int(self.header['Volts']))
-
-            
 
 
         # if file exists then read it
