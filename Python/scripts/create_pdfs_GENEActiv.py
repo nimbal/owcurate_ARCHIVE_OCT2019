@@ -1,3 +1,6 @@
+# ENSURE COMPUTER DOES NOT GO TO SLEEP WHILE SCRIPT IS RUNNING
+
+
 import sys
 sys.path.append('/Users/kbeyer/repos')
 
@@ -31,6 +34,8 @@ bin_paths = [os.path.join(bin_folder, bin_file) for bin_file in bin_files]
 num_files = len(bin_paths)
 file_text = 'file' if num_files == 1 else 'files'
 print(f'Creating {num_files} pdf summary {file_text} ...\n')
+
+print('****** ENSURE COMPUTER DOES NOT SLEEP WHILE SCRIPT IS RUNNING ******\n')
 
 # initialize file and time counters
 file_count = 1
