@@ -3,7 +3,7 @@
 
 import os
 import shutil
-import datetime
+import datetime as dt
 import fpdf
 import matplotlib.pyplot as plt
 import matplotlib.style as mstyle
@@ -78,6 +78,7 @@ class GENEActivFile:
         self.accel_z_max = None          # accelerometer z maximum value
         self.light_min = None            # light minimum value
         self.light_max = None            # light maximum value
+        self.drift_rate = None           # rate of drift per unit of time
         self.data_packet = None          # hexadecimal data from entire file
         self.dataview_start = None       # start page of current dataview
         self.dataview_end = None         # end page of current dataview
@@ -238,6 +239,48 @@ class GENEActivFile:
             self.light_max = (1023 * int(self.header['Lux']) /
                               int(self.header['Volts']))
 
+        def calc_drift_rate():
+
+            '''Calculates clock drift rate
+
+            Clock drift appears to be calculated at data extraction (Extract
+            Time) likely comparing the device clock with the base clock. The
+            device clock was likely synchronized at Config Time so clock drift
+            rate should be calculated from Config Time to Extract Time as is
+            done here.
+
+            Parameters
+            ----------
+            None
+
+            Returns
+            -------
+            None
+
+            '''
+            
+            config_time = dt.datetime.strptime(self.header["Config Time"],
+                                               '%Y-%m-%d %H:%M:%S:%f')
+
+            extract_time = dt.datetime.strptime(self.header["Extract Time"],
+                                               '%Y-%m-%d %H:%M:%S:%f')
+
+            total_seconds = (extract_time - config_time).total_seconds()
+
+
+            start_index = self.header['Extract Notes'].index('drift') + 6
+            end_index = (self.header['Extract Notes'][start_index:].index('s') +
+                         start_index)
+            clock_drift = float(self.header['Extract Notes'][start_index:end_index])
+
+            self.drift_rate = clock_drift / total_seconds
+
+            #print(f'\nConfig time: {config_time}')
+            #print(f'Extract time: {extract_time}')
+            #print(f'Total time: {total_seconds} seconds')
+            #print(f'Clock drift: {clock_drift} seconds')
+            #print(f'Drift rate: {self.drift_rate}')
+
 
         # if file exists then read it
         if os.path.exists(self.file_path):
@@ -254,6 +297,9 @@ class GENEActivFile:
             # calculate accelerometer ranges
             calc_ranges()
 
+            # calculate sample rate adjusted for clock drift
+            calc_drift_rate()
+
             return True # file exists and was read
 
         else:
@@ -269,8 +315,7 @@ class GENEActivFile:
         #TO DO:
         # - test to ensure values are correct (compare to GENEAread R package)
         # - confirm dictionary item lengths equal ?
-        # - option to adjust for clock drift (synchronize) - just adjust
-        # actual sample rate based on clock drift ?
+        # - option to adjust for clock drift (synchronize)
         # - start and end by time (find last page w page time < start)
         # - add option to return battery voltage??
 
@@ -293,9 +338,11 @@ class GENEActivFile:
             NOTE: temperature is only sampled once per page but is currently
             inserted at each measurement consistent with GENEARead R package 
         calibrate : bool
-            should accelerometer and light values be calibrated (default = True)
+            should accelerometer and light values be calibrated? (default = True)
         update : bool
             should dataview attributes be updated? (default = True)
+        correct_drift: bool
+            should sample rate be adjusted for clock drift? (default = False)
 
         Returns
         -------
@@ -359,7 +406,7 @@ class GENEActivFile:
         #check downsample for valid values
         if downsample < 1: downsample = 1
         elif downsample > 6: downsample = 6
-        
+
         # initialize dataview
         dataview = {"time" : [],
                     "accel_x" : [],
@@ -368,8 +415,8 @@ class GENEActivFile:
                     "light"   : [],
                     "button"  : []}
 
-        downsampled_rate = (int(self.header['Measurement Frequency'][:-3]) /
-                            downsample)
+        sample_rate = int(self.header['Measurement Frequency'][:-3])
+        downsampled_rate = (sample_rate / downsample)
         meas_per_page = int(300 / downsample)
 
         # get calibration variables from header
@@ -393,10 +440,10 @@ class GENEActivFile:
             # get page time
             colon = time_line.index(':')
             page_time = time_line[colon + 1:]
-            page_time = datetime.datetime.strptime(page_time, '%Y-%m-%d %H:%M:%S:%f')
+            page_time = dt.datetime.strptime(page_time, '%Y-%m-%d %H:%M:%S:%f')
 
             # generate timestamps
-            times = [page_time + datetime.timedelta(seconds = i / downsampled_rate)
+            times = [page_time + dt.timedelta(seconds = i / downsampled_rate)
                       for i in range(meas_per_page)]
             #times = [t.strftime('%Y-%m-%d %H:%M:%S.%f') for t in times]
 
@@ -504,6 +551,9 @@ class GENEActivFile:
             be slightly less than the number of hours specified
         downsample : int
             factor by which to downsample (range: 1-6, default = 5)
+        correct_drift: bool
+            should sample rate be adjusted for clock drift? (default = False)
+        
 
         Returns
         -------
@@ -528,10 +578,12 @@ class GENEActivFile:
 
         png_folder = os.path.join(pdf_folder, 'temp','')
 
-        # calculate sample rate and pages per plot
+        # adjust sample rate for clock drift?
         sample_rate = int(self.header['Measurement Frequency'][:-3])
+
+        # calculate pages per plot
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
-        window_sequence = range(1, round(self.pagecount), window_pages)
+        window_sequence = [1]#range(1, round(self.pagecount), window_pages)
 
 
         # CREATE PLOTS ------
@@ -662,7 +714,7 @@ class GENEActivFile:
                 ax[subplot_index].set_ylim(yaxis_lim[subplot_index])
                 ax[subplot_index].set_xlim(window_start,
                                            window_start +
-                                           datetime.timedelta(hours = 4))
+                                           dt.timedelta(hours = 4))
 
                 # increment to next subplot
                 subplot_index += 1
