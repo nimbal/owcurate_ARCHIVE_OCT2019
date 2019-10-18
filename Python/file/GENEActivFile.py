@@ -56,9 +56,6 @@ class GENEActivFile:
 
     def __init__(self, file_path):
 
-        # TODO:
-        # - decide on best way of storing dataview (dictionary, numpy, pandas, datatable?)
-
         '''
         Parameters
         ----------
@@ -241,13 +238,17 @@ class GENEActivFile:
 
         def calc_drift_rate():
 
+            # NOT SURE IF CLOCK IS SYNC'd AT CONFIG TIME OR START TIME ???
+            # IF CHANGE TO START TIME HERE, NEED TO CHANGE TO START TIME
+            # WHEN CALCULATING TIME VALUES IN VIEW_DATA
+
             '''Calculates clock drift rate
 
             Clock drift appears to be calculated at data extraction (Extract
             Time) likely comparing the device clock with the base clock. The
             device clock was likely synchronized at Config Time so clock drift
             rate should be calculated from Config Time to Extract Time as is
-            done here.
+            done here. 
 
             Parameters
             ----------
