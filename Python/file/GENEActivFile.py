@@ -275,6 +275,10 @@ class GENEActivFile:
 
             self.drift_rate = clock_drift / total_seconds
 
+
+            # can adjust sample rate by dividing by (1-drift_rate)
+            # can adjust time delta by multiplying by (1-drift_rate)
+
             #print(f'\nConfig time: {config_time}')
             #print(f'Extract time: {extract_time}')
             #print(f'Total time: {total_seconds} seconds')
@@ -310,7 +314,8 @@ class GENEActivFile:
 
 
     def view_data(self, start = 1, end = -1, downsample = 1,
-                  temperature = True, calibrate = True, update = True):
+                  temperature = True, calibrate = True, update = True,
+                  correct_drift = False):
 
         #TO DO:
         # - test to ensure values are correct (compare to GENEAread R package)
@@ -415,6 +420,7 @@ class GENEActivFile:
                     "light"   : [],
                     "button"  : []}
 
+        total_pages = end - (start - 1)
         sample_rate = int(self.header['Measurement Frequency'][:-3])
         downsampled_rate = (sample_rate / downsample)
         meas_per_page = int(300 / downsample)
@@ -430,26 +436,29 @@ class GENEActivFile:
             lux = int(self.header['Lux'])
             volts = int(self.header['Volts'])
 
-        # grab chunk of page times from packet
-        time_chunk = [self.data_packet[i]
-                    for i in range((start - 1) * 10 + 3, end * 10, 10)]
 
-        # loop through pages
-        for time_line in time_chunk:
+        # get start_time (time of first data point in view)
+        start_time_line = self.data_packet[(start - 1) * 10 + 3]
+        colon = start_time_line.index(':')
+        start_time = start_time_line[colon + 1:]
+        start_time = dt.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S:%f')
 
-            # get page time
-            colon = time_line.index(':')
-            page_time = time_line[colon + 1:]
-            page_time = dt.datetime.strptime(page_time, '%Y-%m-%d %H:%M:%S:%f')
+        config_time = dt.datetime.strptime(self.header["Config Time"],
+                                           '%Y-%m-%d %H:%M:%S:%f')
 
-            # generate timestamps
-            times = [page_time + dt.timedelta(seconds = i / downsampled_rate)
-                      for i in range(meas_per_page)]
-            #times = [t.strftime('%Y-%m-%d %H:%M:%S.%f') for t in times]
+        # set time_adj based on correct_drift = True or False
+        time_adj = (1-self.drift_rate) if correct_drift else 1
 
-            dataview['time'].extend(times)      
+        # adjust for drift
+        start_time = (config_time +
+                      ((start_time - config_time) * time_adj))  
+
+        # generate timestamps
+        dataview['time'] = [start_time +
+                            dt.timedelta(seconds = i / downsampled_rate *
+                                         time_adj)
+                            for i in range(total_pages * meas_per_page)]    
             
-
         # grab chunk of data from packet
         data_chunk = [self.data_packet[i]
                     for i in range((start - 1) * 10 + 9, end * 10, 10)]
@@ -513,7 +522,7 @@ class GENEActivFile:
         if update:
             self.dataview_start = start
             self.dataview_end = end
-            self.dataview_sample_rate = downsampled_rate
+            self.dataview_sample_rate = downsampled_rate / time_adj
             self.dataview = dataview
 
         # display message if start and end values were changed
@@ -533,7 +542,8 @@ class GENEActivFile:
         return dataview
 
         
-    def create_pdf(self, pdf_folder, window_hours = 4, downsample = 5):
+    def create_pdf(self, pdf_folder, window_hours = 4, downsample = 5,
+                   correct_drift = False):
 
         # TODO:
         # - DOUBLES PLOT TIME TO ADD DATES AS DATETIME TYPE
@@ -583,8 +593,8 @@ class GENEActivFile:
 
         # calculate pages per plot
         window_pages = round((window_hours * 60 * 60 * sample_rate) / 300)
-        window_sequence = [1]#range(1, round(self.pagecount), window_pages)
-
+        window_sequence = range(1, round(self.pagecount), window_pages)
+        #window_sequence = range(1, window_pages*6, window_pages)
 
         # CREATE PLOTS ------
 
@@ -593,8 +603,7 @@ class GENEActivFile:
         hours_fmt = mdates.DateFormatter('%H:%M')
 
         # set plot parameters
-
-
+        
         # each accel axis has a different min and max based on the digital range
         # and the offset and gain values (-8 to 8 stated in the header is just
         # a minimum range, actual range is slightly larger)
@@ -656,7 +665,8 @@ class GENEActivFile:
             plot_data = self.view_data(start = start_index,
                                        end = end_index,
                                        downsample = downsample,
-                                       update = False)
+                                       update = False,
+                                       correct_drift = correct_drift)
 
             # format start and end date for current window
             time_format = '%b %-d, %Y (%A) @ %H:%M:%S.%f'
