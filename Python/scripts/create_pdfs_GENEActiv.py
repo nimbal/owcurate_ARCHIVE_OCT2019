@@ -10,8 +10,14 @@ import owcurate.Python.file.GENEActivFile as ga
 import time
 from pprint import pprint
 
+# correct clock drift
+correct_drift = True
+
 # set folder paths
-bin_folder = ('/Users/kbeyer/repos/test_data/testin')
+#bin_folder = ('/Volumes/nimbal$/Data/ReMiNDD/Raw data/GENEActiv/')
+#pdf_folder = ('Volumes/nimbal$/Data/ReMiNDD/Processed Data/pdf_summaries/GENEActiv')
+
+bin_folder = ('/Users/kbeyer/repos/test_data/testin/')
 pdf_folder = ('/Users/kbeyer/repos/test_data/testout/')
 
 # list bin files in folder
@@ -59,7 +65,7 @@ for bin_path in bin_paths:
 
     # create pdf cummary
     print('Creating pdf ...')
-    ga_file.create_pdf(pdf_folder)
+    ga_file.create_pdf(pdf_folder, correct_drift = correct_drift)
 
     # get time difference
     end = time.time()
