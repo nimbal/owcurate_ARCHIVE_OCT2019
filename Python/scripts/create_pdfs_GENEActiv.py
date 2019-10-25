@@ -1,6 +1,5 @@
 # ENSURE COMPUTER DOES NOT GO TO SLEEP WHILE SCRIPT IS RUNNING
 
-
 import sys
 sys.path.append('/Users/kbeyer/repos')
 
@@ -10,10 +9,11 @@ import owcurate.Python.file.GENEActivFile as ga
 import time
 from pprint import pprint
 
-# correct clock drift
+# correct clock drift?
 correct_drift = True
 
 # set folder paths
+
 #bin_folder = ('/Volumes/nimbal$/Data/ReMiNDD/Raw data/GENEActiv/')
 #pdf_folder = ('Volumes/nimbal$/Data/ReMiNDD/Processed Data/pdf_summaries/GENEActiv')
 
